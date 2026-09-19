@@ -1,0 +1,77 @@
+name: Build Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify distribution sources
+        shell: pwsh
+        run: |
+          python verify_distribution.py
+
+      - name: Install PyInstaller
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Build ONEDIR application
+        shell: pwsh
+        run: |
+          python -m PyInstaller --clean --noconfirm DividendFIRE.spec
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "installer\DividendFIRE.iss"
+
+      - name: Compute SHA-256
+        shell: pwsh
+        run: |
+          $hash = Get-FileHash "release\DividendFIRE-Setup-v1.0.0.exe" -Algorithm SHA256
+          "SHA256  $($hash.Hash)  DividendFIRE-Setup-v1.0.0.exe" | Out-File "release\SHA256.txt" -Encoding ascii
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: DividendFIRE-Windows-Installer
+          path: |
+            release/DividendFIRE-Setup-v1.0.0.exe
+            release/SHA256.txt
+          if-no-files-found: error
+
+      - name: Publish GitHub Release for tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/DividendFIRE-Setup-v1.0.0.exe
+            release/SHA256.txt
