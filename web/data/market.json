@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "generated_at": null,
+  "usdkrw": 1400,
+  "fxSource": "DEMO FALLBACK",
+  "tickers": {
+    "VOO": {
+      "ticker": "VOO",
+      "currency": "USD",
+      "price": 600,
+      "ttm_dps": 7.2,
+      "yield": 0.012,
+      "historical_total_return_cagr": 0.1,
+      "history_years": 5,
+      "default_price_growth": 0.055,
+      "default_distribution_growth": 0.05,
+      "source": "DEMO FALLBACK"
+    },
+    "SCHD": {
+      "ticker": "SCHD",
+      "currency": "USD",
+      "price": 34,
+      "ttm_dps": 1.054,
+      "yield": 0.031,
+      "historical_total_return_cagr": 0.1,
+      "history_years": 5,
+      "default_price_growth": 0.04,
+      "default_distribution_growth": 0.06,
+      "source": "DEMO FALLBACK"
+    },
+    "GLD": {
+      "ticker": "GLD",
+      "currency": "USD",
+      "price": 330,
+      "ttm_dps": 0,
+      "yield": 0,
+      "historical_total_return_cagr": 0.12,
+      "history_years": 5,
+      "default_price_growth": 0.03,
+      "default_distribution_growth": 0,
+      "source": "DEMO FALLBACK"
+    },
+    "JEPQ": {
+      "ticker": "JEPQ",
+      "currency": "USD",
+      "price": 60,
+      "ttm_dps": 6.48,
+      "yield": 0.108,
+      "historical_total_return_cagr": 0.17,
+      "history_years": 4.2,
+      "default_price_growth": 0.025,
+      "default_distribution_growth": 0,
+      "source": "DEMO FALLBACK"
+    },
+    "QQQ": {
+      "ticker": "QQQ",
+      "currency": "USD",
+      "price": 600,
+      "ttm_dps": 3.6,
+      "yield": 0.006,
+      "historical_total_return_cagr": 0.14,
+      "history_years": 5,
+      "default_price_growth": 0.065,
+      "default_distribution_growth": 0.05,
+      "source": "DEMO FALLBACK"
+    },
+    "VTI": {
+      "ticker": "VTI",
+      "currency": "USD",
+      "price": 330,
+      "ttm_dps": 4.62,
+      "yield": 0.014,
+      "historical_total_return_cagr": 0.1,
+      "history_years": 5,
+      "default_price_growth": 0.055,
+      "default_distribution_growth": 0.05,
+      "source": "DEMO FALLBACK"
+    },
+    "JEPI": {
+      "ticker": "JEPI",
+      "currency": "USD",
+      "price": 57,
+      "ttm_dps": 4.275,
+      "yield": 0.075,
+      "historical_total_return_cagr": 0.09,
+      "history_years": 5,
+      "default_price_growth": 0.02,
+      "default_distribution_growth": 0,
+      "source": "DEMO FALLBACK"
+    },
+    "TLT": {
+      "ticker": "TLT",
+      "currency": "USD",
+      "price": 90,
+      "ttm_dps": 3.6,
+      "yield": 0.04,
+      "historical_total_return_cagr": -0.01,
+      "history_years": 5,
+      "default_price_growth": 0.01,
+      "default_distribution_growth": 0,
+      "source": "DEMO FALLBACK"
+    },
+    "SGOV": {
+      "ticker": "SGOV",
+      "currency": "USD",
+      "price": 100,
+      "ttm_dps": 4,
+      "yield": 0.04,
+      "historical_total_return_cagr": 0.04,
+      "history_years": 5,
+      "default_price_growth": 0,
+      "default_distribution_growth": 0,
+      "source": "DEMO FALLBACK"
+    }
+  }
+}
