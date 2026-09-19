@@ -1,0 +1,401 @@
+
+const EXPECTED_APP_VERSION='v8.9.3';
+const EXPECTED_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
+async function verifyBuild(){
+  const proof=$('#buildProof');
+  try{
+    const r=await fetch('/api/version?ts='+Date.now(),{cache:'no-store'});
+    const j=await r.json();
+    if(!r.ok||j.version!==EXPECTED_APP_VERSION||j.build!==EXPECTED_BUILD){
+      if(proof){proof.textContent=`⚠ 빌드 불일치: frontend ${EXPECTED_APP_VERSION} / backend ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
+      throw new Error('구버전 서버가 열려 있습니다. 새로 열린 v8.9.3 탭을 사용하세요.');
+    }
+    if(proof){proof.textContent='✓ FRONTEND v8.9.3 · BACKEND v8.9.3 VERIFIED · 명목/현재가치 hover + 연도별 적립';proof.classList.add('ok');}
+    return true;
+  }catch(e){
+    if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ v8.9.3 백엔드 확인 실패: '+e.message;proof.classList.add('bad');}
+    throw e;
+  }
+}
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+const pf = $('#portfolio');
+const SETTINGS_KEY = 'DividendFireMVP.settings.v2';
+const LEGACY_SETTINGS_KEY = 'DividendFireMVP.settings.v1';
+let portfolio = [
+  { ticker: 'SCHD', weight: 69, priceGrowth: 4.0, distributionGrowth: 6.0 },
+  { ticker: 'JEPQ', weight: 31, priceGrowth: 2.5, distributionGrowth: 2.0 },
+];
+let saveTimer = null;
+let contributionSchedule = {}; // {calendarYear: monthlyContributionManwon}; restored with settings
+
+
+function settingsSnapshot(){
+  const ids=['age','initial','income','fixed','contrib','fireexp','health','postFireIncome','otherincome','inflation','years','withdrawalRate','stress'];
+  const fields={}; ids.forEach(id=>{ const el=$('#'+id); if(el) fields[id]=el.value; });
+  return {fields,fireMode:fireMode(),reinvest:$('#reinvest')?.checked!==false,portfolio:portfolio.map(x=>({...x})),contributionSchedule:{...contributionSchedule}};
+}
+function applySettings(v){
+  if(!v || typeof v!=='object') return false;
+  if(v.fields) Object.entries(v.fields).forEach(([id,val])=>{const el=$('#'+id);if(el&&val!==undefined&&val!==null)el.value=val;});
+  if(v.fireMode){const r=document.querySelector(`input[name="fireMode"][value="${v.fireMode}"]`);if(r)r.checked=true;}
+  if(typeof v.reinvest==='boolean'&&$('#reinvest')) $('#reinvest').checked=v.reinvest;
+  if(Array.isArray(v.portfolio)&&v.portfolio.length){
+    portfolio=v.portfolio.map(x=>({ticker:sanitizeTicker(x.ticker),weight:+x.weight||0,priceGrowth:+x.priceGrowth||0,distributionGrowth:+x.distributionGrowth||0})).filter(x=>x.ticker);
+    rebalanceAfterDelete();
+  }
+  contributionSchedule={};
+  if(v.contributionSchedule && typeof v.contributionSchedule==='object'){
+    Object.entries(v.contributionSchedule).forEach(([year,val])=>{
+      const y=parseInt(year,10), n=Number(val);
+      if(Number.isFinite(y)&&y>=1900&&y<=2300&&Number.isFinite(n)&&n>=0) contributionSchedule[String(y)]=n;
+    });
+  }
+  return true;
+}
+function saveLocal(snapshot){
+  try{ localStorage.setItem(SETTINGS_KEY,JSON.stringify(snapshot)); }catch(_){}
+}
+function restoreLocal(){
+  try{
+    const raw=localStorage.getItem(SETTINGS_KEY)||localStorage.getItem(LEGACY_SETTINGS_KEY);
+    return raw?applySettings(JSON.parse(raw)):false;
+  }catch(_){return false;}
+}
+
+async function loadSettings(){
+  try{
+    const r=await fetch('/api/settings',{cache:'no-store'});
+    const j=await r.json();
+    if(r.ok && j.settings && Object.keys(j.settings).length) return applySettings(j.settings);
+  }catch(_){}
+  return restoreLocal();
+}
+function setSaveStatus(text,kind=''){
+  const el=$('#saveStatus'); if(!el)return; el.textContent=text; el.className='save-status '+kind;
+}
+function scheduleSave(){
+  const snapshot=settingsSnapshot();
+  saveLocal(snapshot);
+  setSaveStatus('저장 중…','saving');
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(async()=>{
+    try{
+      const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snapshot),cache:'no-store'});
+      if(!r.ok) throw new Error('save failed');
+      setSaveStatus('저장됨','saved');
+    }catch(_){ setSaveStatus('브라우저에만 저장됨','warn'); }
+  },220);
+}
+function bindAutoSave(){
+  document.querySelectorAll('input,select').forEach(el=>{el.addEventListener('input',scheduleSave);el.addEventListener('change',scheduleSave);});
+}
+
+function clamp(n, min, max) { return Math.max(min, Math.min(max, Number(n) || 0)); }
+function manwon(n) { const v=(Number(n)||0)/10000; return v.toLocaleString('ko-KR',{maximumFractionDigits:1})+'만원'; }
+function manwonInput(n) { return (Number(n)||0)*10000; }
+function pct01(n) { return ((Number(n)||0)*100).toFixed(2)+'%'; }
+function pct100(n) { return (Number(n)||0).toFixed(1)+'%'; }
+function usd(n) { return '$'+(Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:2}); }
+function sanitizeTicker(t){return String(t||'').trim().toUpperCase().replace(/[^A-Z0-9.^=\-]/g,'');}
+function fireMode(){return $('input[name="fireMode"]:checked')?.value||'withdrawal';}
+
+function normalizeWeights(changedIndex,newWeight){
+  const n=portfolio.length;if(!n)return;if(n===1){portfolio[0].weight=100;return;}
+  const target=clamp(newWeight,0,100);const oldOthers=portfolio.reduce((s,x,i)=>s+(i===changedIndex?0:x.weight),0);const remain=100-target;
+  portfolio[changedIndex].weight=target;
+  if(oldOthers<=0){const each=remain/(n-1);portfolio.forEach((x,i)=>{if(i!==changedIndex)x.weight=each;});}
+  else portfolio.forEach((x,i)=>{if(i!==changedIndex)x.weight=x.weight/oldOthers*remain;});
+  const sum=portfolio.reduce((a,x)=>a+x.weight,0);const ci=portfolio.findIndex((_,i)=>i!==changedIndex);if(ci>=0)portfolio[ci].weight+=100-sum;
+}
+function rebalanceAfterDelete(){if(!portfolio.length)return;const s=portfolio.reduce((a,x)=>a+x.weight,0);if(s<=0){const e=100/portfolio.length;portfolio.forEach(x=>x.weight=e);}else portfolio.forEach(x=>x.weight=x.weight/s*100);}
+function syncWeightControls(){
+  $$('.portfolio-row').forEach((row,i)=>{const item=portfolio[i];if(!item)return;const range=row.querySelector('.weight-range');const num=row.querySelector('.weight-number');const v=item.weight.toFixed(1);if(range&&document.activeElement!==range)range.value=v;if(num&&document.activeElement!==num)num.value=v;});
+  $('#weightTotal').textContent=pct100(portfolio.reduce((a,x)=>a+x.weight,0));
+}
+function renderPF(){
+  pf.innerHTML='';
+  portfolio.forEach((item,i)=>{
+    const row=document.createElement('div');row.className='portfolio-row';
+    row.innerHTML=`<b>${item.ticker}</b>
+      <input class="weight-range" type="range" min="0" max="100" step="0.5" value="${item.weight.toFixed(1)}" aria-label="${item.ticker} 비중">
+      <div class="weight-box"><input class="weight-number" type="number" min="0" max="100" step="0.5" value="${item.weight.toFixed(1)}"><span>%</span></div>
+      <button class="remove" type="button" aria-label="${item.ticker} 제거">×</button>
+      <div class="growth-assumptions">
+        <label><span>가격 성장</span><div><input class="price-growth" type="number" min="-50" max="50" step="0.1" value="${Number(item.priceGrowth??4).toFixed(1)}"><em>%/년</em></div></label>
+        <label><span>분배금 성장</span><div><input class="dist-growth" type="number" min="-50" max="50" step="0.1" value="${Number(item.distributionGrowth??2).toFixed(1)}"><em>%/년</em></div></label>
+      </div>`;
+    const range=row.querySelector('.weight-range'),num=row.querySelector('.weight-number');
+    range.addEventListener('input',()=>{normalizeWeights(i,range.value);num.value=portfolio[i].weight.toFixed(1);syncWeightControls();scheduleSave();});
+    num.addEventListener('input',()=>{normalizeWeights(i,num.value);range.value=portfolio[i].weight.toFixed(1);syncWeightControls();scheduleSave();});
+    row.querySelector('.price-growth').addEventListener('input',e=>{portfolio[i].priceGrowth=clamp(e.target.value,-50,50);scheduleSave();});
+    row.querySelector('.dist-growth').addEventListener('input',e=>{portfolio[i].distributionGrowth=clamp(e.target.value,-50,50);scheduleSave();});
+    row.querySelector('.remove').addEventListener('click',()=>{if(portfolio.length<=1)return;portfolio.splice(i,1);rebalanceAfterDelete();renderPF();scheduleSave();});
+    pf.appendChild(row);
+  });syncWeightControls();
+}
+async function addTicker(){
+  const input=$('#newTicker'),ticker=sanitizeTicker(input.value),status=$('#tickerStatus');if(!ticker)return;
+  if(portfolio.some(x=>x.ticker===ticker)){status.textContent=`${ticker}는 이미 들어 있습니다.`;status.className='hint bad';return;}
+  $('#addTicker').disabled=true;status.textContent=`${ticker} 확인 중...`;status.className='hint';
+  try{const r=await fetch(`/api/ticker?ticker=${encodeURIComponent(ticker)}`,{cache:'no-store'});const j=await r.json();if(!r.ok||j.error)throw new Error(j.error||'티커 확인 실패');portfolio.forEach(x=>x.weight*=0.9);portfolio.push({ticker,weight:10,priceGrowth:Number(j.default_price_growth||0.04)*100,distributionGrowth:Number(j.default_distribution_growth||0.02)*100});input.value='';status.textContent=`${ticker} 추가됨 · ${j.source.includes('DEMO')?'DEMO 데이터':'LIVE 확인'}`;renderPF();scheduleSave();}catch(e){status.textContent=e.message;status.className='hint bad';}finally{$('#addTicker').disabled=false;}
+}
+$('#addTicker').addEventListener('click',addTicker);$('#newTicker').addEventListener('keydown',e=>{if(e.key==='Enter')addTicker();});
+
+
+function simulationStartYear(){ return new Date().getFullYear(); }
+function simulationYears(){ return Math.max(1,Math.min(60,parseInt($('#years')?.value||40,10)||40)); }
+function currentContributionManwonForYear(year){
+  const key=String(year);
+  return Object.prototype.hasOwnProperty.call(contributionSchedule,key) ? Number(contributionSchedule[key])||0 : Number($('#contrib')?.value)||0;
+}
+function renderContributionSchedule(){
+  const box=$('#contributionSchedule'); if(!box)return;
+  const start=simulationStartYear(), count=simulationYears(), base=Number($('#contrib')?.value)||0;
+  const validYears=new Set(Array.from({length:count},(_,i)=>String(start+i)));
+  Object.keys(contributionSchedule).forEach(y=>{if(!validYears.has(y)) delete contributionSchedule[y];});
+  box.innerHTML='';
+  const frag=document.createDocumentFragment();
+  for(let i=0;i<count;i++){
+    const year=start+i, key=String(year), row=document.createElement('label');
+    row.className='annual-contrib-row';
+    const has=Object.prototype.hasOwnProperty.call(contributionSchedule,key);
+    row.innerHTML=`<span>${year}년</span><div class="input-unit"><input class="annual-contrib-input" data-year="${year}" type="number" min="0" step="10" value="${has?contributionSchedule[key]:''}" placeholder="${base}"><em>만원/월</em></div>`;
+    const input=row.querySelector('input');
+    input.addEventListener('input',()=>{
+      const raw=input.value.trim();
+      if(raw==='') delete contributionSchedule[key];
+      else contributionSchedule[key]=Math.max(0,Number(raw)||0);
+      updateCashflowHint(); scheduleSave();
+    });
+    frag.appendChild(row);
+  }
+  box.appendChild(frag);
+}
+function annualContributionPayload(){
+  const out={};
+  Object.entries(contributionSchedule).forEach(([year,val])=>{out[year]=manwonInput(val);});
+  return out;
+}
+
+function payload(){
+  const now=new Date();
+  return{
+    currentAge:clamp($('#age').value,0,100),startYear:now.getFullYear(),startMonth:now.getMonth()+1,
+    initialCapital:manwonInput($('#initial').value),monthlyIncome:manwonInput($('#income').value),fixedExpenses:manwonInput($('#fixed').value),monthlyContribution:manwonInput($('#contrib').value),contributionSchedule:annualContributionPayload(),
+    fireExpenses:manwonInput($('#fireexp').value),healthInsurance:manwonInput($('#health').value),postFireIncome:manwonInput($('#postFireIncome').value),otherAnnualIncome:manwonInput($('#otherincome').value),
+    inflation:+$('#inflation').value,years:+$('#years').value,dividendStress:+$('#stress').value,withdrawalRate:+$('#withdrawalRate').value,fireMode:fireMode(),reinvest:$('#reinvest').checked,
+    portfolio:portfolio.map(x=>({ticker:x.ticker,weight:x.weight,priceGrowth:x.priceGrowth,distributionGrowth:x.distributionGrowth}))
+  };
+}
+function updateModeUI(){
+  const withdrawal=fireMode()==='withdrawal';$('#withdrawalRateField').classList.toggle('mode-hidden',!withdrawal);$('#dividendStressField').classList.toggle('mode-hidden',withdrawal);
+  $('#fireLabel').textContent=withdrawal?'n% Withdrawal FIRE':'Dividend FIRE';
+  $('#fireSub').textContent=withdrawal?'세후 n% 인출가능액이 물가반영 필요생활비를 넘는 시점':'원금 매도 없이 세후 배당이 필요생활비를 넘는 시점';
+  $('#currentCashLabel').textContent=withdrawal?'현재 세후 월 인출가능액':'현재 세후 월배당';$('#finalCashLabel').textContent=withdrawal?'최종 세후 월 인출가능액':'최종 세후 월배당';
+  $('#cashChartTitle').textContent=withdrawal?'인출 여력 vs 필요 생활비':'배당 구매력 vs 필요 생활비';
+  $('#cashChartDesc').textContent=withdrawal?'FIRE 이후에는 배당을 먼저 쓰고 부족한 생활비만 자산을 매도합니다.':'FIRE 이후에는 적립을 멈추고 배당으로 생활하며, 초과분만 재투자합니다.';
+  $('#modeHelp').textContent=withdrawal?`연 ${(+$('#withdrawalRate').value||0).toFixed(1)}% 인출 한도로 FIRE 여부를 판단합니다.`:'초기 분배율뿐 아니라 분배금 성장률이 물가를 따라가는지도 함께 봅니다.';
+}
+$$('input[name="fireMode"]').forEach(el=>el.addEventListener('change',updateModeUI));$('#withdrawalRate').addEventListener('input',updateModeUI);
+function updateCashflowHint(){
+  const income=+$('#income').value||0,fixed=+$('#fixed').value||0,year=simulationStartYear();
+  const contrib=currentContributionManwonForYear(year),max=income-fixed,el=$('#cashflowHint');
+  if(contrib>max){el.textContent=`⚠ ${year}년 월 적립금이 소득-고정비보다 ${manwon(manwonInput(contrib-max))} 많습니다.`;el.className='hint bad';}
+  else{el.textContent=`${year}년 기준 투자 후 월 잉여현금 ${manwon(manwonInput(max-contrib))}`;el.className='hint';}
+}
+['income','fixed'].forEach(id=>$('#'+id).addEventListener('input',updateCashflowHint));
+$('#contrib').addEventListener('input',()=>{renderContributionSchedule();updateCashflowHint();});
+$('#years').addEventListener('change',()=>{renderContributionSchedule();scheduleSave();});
+$('#years').addEventListener('input',()=>{renderContributionSchedule();});
+$('#resetContributionSchedule').addEventListener('click',()=>{contributionSchedule={};renderContributionSchedule();updateCashflowHint();scheduleSave();});
+
+function niceMax(max){if(!isFinite(max)||max<=0)return 1;const exp=Math.pow(10,Math.floor(Math.log10(max))),m=max/exp;return(m<=1?1:m<=2?2:m<=5?5:10)*exp;}
+function compactKRW(v){const man=(Number(v)||0)/10000;return man.toLocaleString('ko-KR',{maximumFractionDigits:man<100?1:0})+'만원';}
+function currentValueKRW(v,row){const yrs=Math.max(0,Number(row?.year)||0);const inf=clamp($('#inflation')?.value,-2,15)/100;const factor=Math.pow(1+inf,yrs);return factor>0?(Number(v)||0)/factor:(Number(v)||0);}
+function nominalRealHTML(label,value,row,suffix=''){const real=currentValueKRW(value,row);return `<div class="nominal-real-row"><span>${label}</span><b>명목 ${compactKRW(value)}${suffix}</b><small>현재가치 ${compactKRW(real)}${suffix}</small></div>`;}
+function ageText(age){const a=Number(age)||0;return (Math.abs(a-Math.round(a))<0.05?Math.round(a).toString():a.toFixed(1))+'세';}
+function calendarText(row,withMonth=true){if(!row)return '-';const y=Number(row.calendarYear)||0,m=Number(row.calendarMonth)||1;return withMonth?`${y}년 ${m}월 · ${ageText(row.age)}`:`${y}년 · ${ageText(row.age)}`;}
+function milestoneText(month,j){if(month==null)return null;const total=(Number(j.startMonth||1)-1)+Number(month);const y=Number(j.startYear||new Date().getFullYear())+Math.floor(total/12);const m=(total%12)+1;const age=Number(j.currentAge||0)+Number(month)/12;return {year:y,month:m,age,main:`${y}년 · ${ageText(age)}`,sub:`${m}월 · ${(Number(month)/12).toFixed(1)}년 후`};}
+function nearestRowIndex(rows,targetYear){let bi=0,d=Infinity;for(let i=0;i<rows.length;i++){const nd=Math.abs((Number(rows[i].year)||0)-targetYear);if(nd<d){d=nd;bi=i;}}return bi;}
+function nearestRow(rows,targetYear){return rows[nearestRowIndex(rows,targetYear)];}
+function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
+  if(typeof container._chartCleanup==='function'){try{container._chartCleanup();}catch(_){}}
+  const W=900,H=326,pad={l:78,r:24,t:38,b:58},plotW=W-pad.l-pad.r,plotH=H-pad.t-pad.b;
+  const values=rows.flatMap(r=>series.map(s=>Number(r[s.key])||0));
+  const ymax=niceMax(Math.max(...values,1)),xmax=Math.max(1,Number(rows.at(-1)?.year)||1);
+  const x=yr=>pad.l+(yr/xmax)*plotW,y=val=>pad.t+plotH-(val/ymax)*plotH;
+  let svg=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="시뮬레이션 그래프">`;
+  for(let i=0;i<=4;i++){
+    const val=ymax*i/4,yy=y(val);
+    svg+=`<line class="gridline" x1="${pad.l}" y1="${yy}" x2="${W-pad.r}" y2="${yy}"/><text class="axis" x="${pad.l-9}" y="${yy+4}" text-anchor="end">${compactKRW(val)}</text>`;
+  }
+  [0,.25,.5,.75,1].forEach(f=>{
+    const target=xmax*f,r=nearestRow(rows,target),xx=x(Number(r.year)||0);
+    svg+=`<text class="axis axis-time" x="${xx}" y="${H-28}" text-anchor="middle"><tspan x="${xx}" dy="0">${r.calendarYear}년</tspan><tspan x="${xx}" dy="13">${ageText(r.age)}</tspan></text>`;
+  });
+  series.forEach((s,si)=>{
+    const cls=['series-a','series-b','series-c'][si]||'series-c';
+    const points=rows.map(r=>`${x(Number(r.year)||0).toFixed(1)},${y(Number(r[s.key])||0).toFixed(1)}`).join(' ');
+    svg+=`<polyline class="${cls}" points="${points}"/>`;
+    const lx=pad.l+si*190;
+    svg+=`<line class="${cls}" x1="${lx}" y1="16" x2="${lx+22}" y2="16"/><text class="legend" x="${lx+28}" y="20">${s.label}</text>`;
+  });
+  if(fireMonth!=null&&fireMonth/12<=xmax){
+    const fx=x(fireMonth/12);
+    svg+=`<line class="fire-line" x1="${fx}" y1="${pad.t}" x2="${fx}" y2="${pad.t+plotH}"/><text class="fire-text" x="${Math.min(fx+5,W-95)}" y="${pad.t+12}">🔥 FIRE</text>`;
+  }
+  svg+=`<line class="hover-line" x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${pad.t+plotH}" visibility="hidden"/><g class="hover-dots" visibility="hidden">${series.map((_,i)=>`<circle class="hover-dot dot-${i}" r="4.5" cx="${pad.l}" cy="${pad.t}"/>`).join('')}</g></svg>`;
+
+  container.innerHTML=`<div class="chart-stage">${svg}<div class="chart-tooltip" aria-live="polite"></div></div><div class="chart-readout">그래프 위에 마우스를 움직이면 해당 연도·나이·금액이 표시됩니다.</div>`;
+
+  const stage=container.querySelector('.chart-stage');
+  const svgEl=stage.querySelector('svg');
+  const tip=stage.querySelector('.chart-tooltip');
+  const hover=svgEl.querySelector('.hover-line');
+  const dots=Array.from(svgEl.querySelectorAll('.hover-dot'));
+  const dotGroup=svgEl.querySelector('.hover-dots');
+  const readout=container.querySelector('.chart-readout');
+  let pinned=false,currentIndex=0;
+
+  function hide(){
+    if(pinned)return;
+    tip.classList.remove('visible');
+    hover.setAttribute('visibility','hidden');
+    dotGroup.setAttribute('visibility','hidden');
+  }
+
+  function renderRow(r,idx,clientX=null,clientY=null,showTip=true){
+    if(!r)return;
+    currentIndex=idx;
+    const stageRect=stage.getBoundingClientRect();
+    const svgRect=svgEl.getBoundingClientRect();
+    if(!stageRect.width||!stageRect.height||!svgRect.width)return;
+    const vx=x(Number(r.year)||0);
+    hover.setAttribute('x1',vx);hover.setAttribute('x2',vx);hover.setAttribute('visibility','visible');
+    dots.forEach((d,i)=>{d.setAttribute('cx',vx);d.setAttribute('cy',y(Number(r[series[i].key])||0));});
+    dotGroup.setAttribute('visibility','visible');
+    const isWithdrawal=cashMode==='withdrawal';
+    const netMonthly=isWithdrawal?(Number(r.netWithdrawal)||0):(Number(r.netDividend)||0);
+    const grossMonthly=isWithdrawal?(Number(r.grossWithdrawal)||0):(Number(r.grossDividend)||0);
+    const monthlyLabel=isWithdrawal?'세후 월 인출 가능액':'세후 월 배당금';
+    const realNetMonthly=currentValueKRW(netMonthly,r);
+    const realGrossMonthly=currentValueKRW(grossMonthly,r);
+    const body=`<div class="tooltip-monthly"><span>${monthlyLabel}</span><b>명목 ${compactKRW(netMonthly)}/월</b><strong>현재가치 ${compactKRW(realNetMonthly)}/월</strong><small>세전 명목 ${compactKRW(grossMonthly)}/월 · 현재가치 ${compactKRW(realGrossMonthly)}/월</small></div>`+
+      series.map(s=>nominalRealHTML(s.label,r[s.key],r)).join('')+
+      nominalRealHTML('월 적립금',r.monthlyContribution||0,r,'/월')+
+      nominalRealHTML('생활비 필요액',r.requiredFromPortfolio,r,'/월');
+    tip.innerHTML=`<strong>${calendarText(r,true)}</strong><small>${r.phase==='FIRE'?'🔥 FIRE 생활기':'축적기'} · ${(Number(r.year)||0).toFixed(1)}년 후</small>${body}`;
+
+    const plotLeft=svgRect.left+(pad.l/W)*svgRect.width;
+    const plotRight=svgRect.right-(pad.r/W)*svgRect.width;
+    const fallbackX=plotLeft+(plotRight-plotLeft)*(idx/Math.max(1,rows.length-1));
+    const px=(clientX==null?fallbackX:clientX)-stageRect.left;
+    const py=(clientY==null?(svgRect.top+(pad.t/H)*svgRect.height+18):clientY)-stageRect.top;
+    const tw=Math.min(270,Math.max(205,stageRect.width-16));
+    let left=px+14;
+    if(left+tw>stageRect.width-8) left=px-tw-14;
+    left=Math.max(8,Math.min(stageRect.width-tw-8,left));
+    const top=Math.max(8,Math.min(Math.max(8,stageRect.height-130),py-22));
+    tip.style.left=`${left}px`;tip.style.top=`${top}px`;tip.style.width=`${tw}px`;
+    tip.classList.toggle('visible',showTip);
+    tip.classList.toggle('pinned',pinned);
+
+    readout.innerHTML=`<strong>${calendarText(r,true)}</strong><span>${r.phase==='FIRE'?'🔥 FIRE 생활기':'축적기'}</span><b class="readout-monthly">${monthlyLabel} 명목 ${compactKRW(netMonthly)}/월 · 현재가치 ${compactKRW(realNetMonthly)}/월</b>${series.map(s=>`<b>${s.label} ${compactKRW(r[s.key])} (현재가치 ${compactKRW(currentValueKRW(r[s.key],r))})</b>`).join('')}<b>월 적립 ${compactKRW(r.monthlyContribution||0)} (현재가치 ${compactKRW(currentValueKRW(r.monthlyContribution||0,r))})</b><b>생활비 ${compactKRW(r.requiredFromPortfolio)} (현재가치 ${compactKRW(currentValueKRW(r.requiredFromPortfolio,r))})</b>`;
+    readout.classList.add('active');
+  }
+
+  function indexFromClientX(clientX){
+    const rect=svgEl.getBoundingClientRect();
+    if(!rect.width)return 0;
+    const plotLeft=rect.left+(pad.l/W)*rect.width;
+    const plotRight=rect.right-(pad.r/W)*rect.width;
+    const frac=Math.max(0,Math.min(1,(clientX-plotLeft)/Math.max(1,plotRight-plotLeft)));
+    return nearestRowIndex(rows,frac*xmax);
+  }
+  function showFromPointer(ev){
+    const idx=indexFromClientX(ev.clientX);
+    renderRow(rows[idx],idx,ev.clientX,ev.clientY,true);
+  }
+
+  // Guaranteed hover path: listen on the whole chart stage in capture phase.
+  // This keeps working even if SVG children or overlays become the event target.
+  ['pointermove','mousemove'].forEach(type=>stage.addEventListener(type,showFromPointer,true));
+  stage.addEventListener('pointerenter',showFromPointer,true);
+  stage.addEventListener('mouseenter',showFromPointer,true);
+  stage.addEventListener('pointerleave',hide,true);
+  stage.addEventListener('mouseleave',hide,true);
+  stage.addEventListener('click',ev=>{
+    pinned=!pinned;
+    showFromPointer(ev);
+    tip.classList.toggle('pinned',pinned);
+    if(!pinned)hide();
+  });
+  stage.addEventListener('touchstart',ev=>{
+    const t=ev.touches&&ev.touches[0];if(!t)return;
+    pinned=true;
+    const idx=indexFromClientX(t.clientX);
+    renderRow(rows[idx],idx,t.clientX,t.clientY,true);
+  },{passive:true,capture:true});
+
+  // Last-resort desktop path: track pointer at window level and map it back to this chart.
+  // This bypasses SVG/overlay/browser hit-testing differences entirely.
+  const globalMove=ev=>{
+    const r=stage.getBoundingClientRect();
+    const inside=ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom;
+    if(inside) showFromPointer(ev);
+    else if(!pinned) hide();
+  };
+  window.addEventListener('pointermove',globalMove,true);
+  window.addEventListener('mousemove',globalMove,true);
+  container._chartCleanup=()=>{
+    window.removeEventListener('pointermove',globalMove,true);
+    window.removeEventListener('mousemove',globalMove,true);
+  };
+
+  // Show a persistent initial readout so hover status is visible before interaction.
+  renderRow(rows[0],0,null,null,false);
+}
+
+async function runSimulation(){
+  if(!portfolio.length)return;const btn=$('#run'),status=$('#status');btn.disabled=true;status.className='status';status.textContent='LIVE 데이터 다운로드 및 2단계 FIRE 계산 중...';
+  try{const r=await fetch('/api/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});const j=await r.json();if(!r.ok||j.error)throw new Error(j.error||'시뮬레이션 실패');const withdrawal=j.fireMode==='withdrawal';
+    const fm=milestoneText(j.fireMonth,j),failm=milestoneText(j.postFireFailureMonth,j);
+    if(j.fireMonth==null){$('#fireCard').textContent='기간 내 미도달';}
+    else{$('#fireCard').textContent=fm.main;}
+    if(j.fireMonth!=null&&j.postFireFailureMonth!=null){$('#fireSub').textContent=`${fm.sub} · ⚠ ${failm.year}년 ${failm.month}월 (${ageText(failm.age)})부터 유지 실패`;$('#fireCard').closest('.metric').classList.add('warn');}
+    else{$('#fireCard').closest('.metric').classList.remove('warn');$('#fireSub').textContent=j.fireMonth==null?'현재 가정에서 목표기간 내 현금흐름 부족':`${fm.sub} · ${withdrawal?'FIRE 후 적립 중단 · 배당+필요분 매도':'FIRE 후 적립 중단 · 원금 매도 없이 배당생활 유지'}`;}
+    $('#assetCard').textContent=manwon(j.finalAssets);$('#assetSub').textContent=j.fireAssets!=null?`FIRE 시점 ${manwon(j.fireAssets)} · 그때까지 납입 ${manwon(j.fireContributed||0)}`:`목표기간 동안 계속 적립`;
+    $('#currentDivCard').textContent=manwon(j.currentNetCashflow)+'/월';$('#finalDivCard').textContent=manwon(j.finalNetCashflow)+'/월';
+    $('#finalLivingSub').textContent=withdrawal?`최종 포트폴리오 필요액 ${manwon(j.finalRequiredFromPortfolio)}/월`:`실질 월배당 ${manwon(j.finalRealNetDividend)} · 현재가치 필요액 ${manwon(j.finalRealRequired)}`;
+    $('#yieldCard').textContent=withdrawal?`인출 ${(j.withdrawalRate*100).toFixed(1)}% · 가격성장 가정 ${pct01(j.weightedPriceGrowth)}`:`현재 분배율 ${pct01(j.weightedYield)} · 분배금 성장 ${pct01(j.weightedDistributionGrowth)} · 물가 ${(+$('#inflation').value||0).toFixed(1)}%`;
+    $('#surplusCard').textContent=manwon(j.monthlySurplus);$('#surplusCard').closest('.metric').classList.toggle('negative',j.monthlySurplus<0);
+    $('#taxCard').textContent=manwon(j.cumulativeTax);$('#taxSub').textContent=`배당세 ${manwon(j.cumulativeDividendTax)} · 매도세 ${manwon(j.cumulativeSaleTax)}`;
+    $('#fxBadge').textContent=`USD/KRW ${Math.round(j.usdkrw).toLocaleString('ko-KR')} · ${j.fxSource.includes('DEMO')?'DEMO':'LIVE'}`;
+    drawChart($('#assetChart'),j.rows,[{key:'assets',label:'총자산'},{key:'contributed',label:'누적 납입'}],j.fireMonth,j.fireMode);
+    drawChart($('#divChart'),j.rows,withdrawal?[{key:'netWithdrawal',label:'세후 n% 인출여력'},{key:'requiredFromPortfolio',label:'필요 생활비'}]:[{key:'netDividend',label:'세후 월배당'},{key:'requiredFromPortfolio',label:'필요 생활비'}],j.fireMonth,j.fireMode);
+    $('#stats').innerHTML=j.stats.map(s=>{const local=s.currency==='USD'?usd(s.price):manwon(s.price),src=s.source.includes('DEMO')?'⚠ DEMO':'LIVE',cls=s.source.includes('DEMO')?'demo':'live',hy=Number(s.history_years||0),hl=hy>=4.75?'약 5년':`${hy.toFixed(1)}년`;return `<tr><td><strong>${s.ticker}</strong></td><td>${pct01(s.weight)}</td><td>${local}</td><td>${manwon(s.price_krw)}</td><td>${pct01(s.yield)}</td><td>${pct01(s.historical_total_return_cagr)}</td><td>${hl}</td><td>${pct01(s.price_growth)}</td><td>${pct01(s.distribution_growth)}</td><td class="${cls}">${src}</td></tr>`;}).join('');
+    const demo=j.stats.filter(s=>s.source.includes('DEMO')).map(s=>s.ticker);status.textContent=demo.length?`완료 · DEMO fallback: ${demo.join(', ')}`:'완료 · 모든 종목 LIVE 데이터 사용';
+  }catch(e){status.textContent='오류: '+e.message;status.className='status error';}finally{btn.disabled=false;}
+}
+$('#run').addEventListener('click',runSimulation);
+async function boot(){
+  await verifyBuild();
+  await loadSettings();
+  renderPF();
+  renderContributionSchedule();
+  updateModeUI();
+  updateCashflowHint();
+  bindAutoSave();
+  scheduleSave();
+  runSimulation();
+}
+boot();
+
+// Desktop distribution heartbeat. Keeps the local app process alive while this UI is open.
+(function fireDesktopHeartbeat(){
+  const ping = () => fetch('/api/heartbeat', {method:'POST', cache:'no-store'}).catch(()=>{});
+  ping();
+  setInterval(ping, 15000);
+})();
+
