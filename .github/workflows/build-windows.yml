@@ -133,12 +133,29 @@ jobs:
           $mp = $mpCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $mp) { throw "Microsoft Defender command-line scanner not found" }
           "Defender scanner: $mp" | Out-File $report -Append -Encoding utf8
-          & $mp -Scan -ScanType 3 -File $target 2>&1 | Tee-Object -FilePath $report -Append
+
+          # GitHub-hosted runner work folders can be excluded from AV scanning.
+          # Copy the installer to the normal user C: profile before scanning.
+          $scanDir = Join-Path $env:LOCALAPPDATA "DividendFIRE-DefenderScan"
+          New-Item -ItemType Directory -Path $scanDir -Force | Out-Null
+          $scanTarget = Join-Path $scanDir $env:INSTALLER_NAME
+          Copy-Item $target $scanTarget -Force
+          "Defender scan copy: $scanTarget" | Out-File $report -Append -Encoding utf8
+
+          $scanOutput = & $mp -Scan -ScanType 3 -File $scanTarget 2>&1
           $scanExit = $LASTEXITCODE
+          $scanOutput | Tee-Object -FilePath $report -Append
           "Defender exit code: $scanExit" | Out-File $report -Append -Encoding utf8
+
+          $scanText = ($scanOutput | Out-String)
+          if ($scanText -match "was skipped" -or $scanText -match "skipped") {
+            throw "Microsoft Defender skipped the file instead of scanning it"
+          }
           if ($scanExit -ne 0) {
             throw "Microsoft Defender scan did not return clean success (exit $scanExit)"
           }
+          "Defender result: CLEAN" | Out-File $report -Append -Encoding utf8
+          Remove-Item $scanDir -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: Optional VirusTotal scan
         shell: pwsh
