@@ -14,6 +14,11 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      app_version: ${{ steps.version.outputs.app_version }}
+      installer_name: ${{ steps.version.outputs.installer_name }}
+      publish: ${{ steps.version.outputs.publish }}
 
     steps:
       - name: Checkout
@@ -22,6 +27,7 @@ jobs:
           fetch-depth: 2
 
       - name: Resolve release version
+        id: version
         shell: pwsh
         run: |
           if (Test-Path "RELEASE_VERSION") {
@@ -34,11 +40,27 @@ jobs:
           if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
             throw "Release version must look like v1.2.3"
           }
+
           $appVersion = $tag.Substring(1)
           $installerName = "DividendFIRE-Setup-$tag.exe"
+          $publish = "false"
+
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $publish = "true"
+          } elseif ($env:GITHUB_EVENT_NAME -eq "push" -and $env:GITHUB_REF -eq "refs/heads/main") {
+            $changed = git diff --name-only HEAD^ HEAD
+            if ($changed -contains "RELEASE_VERSION") {
+              $publish = "true"
+            }
+          }
+
           "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
           "APP_VERSION=$appVersion" >> $env:GITHUB_ENV
           "INSTALLER_NAME=$installerName" >> $env:GITHUB_ENV
+          "release_tag=$tag" >> $env:GITHUB_OUTPUT
+          "app_version=$appVersion" >> $env:GITHUB_OUTPUT
+          "installer_name=$installerName" >> $env:GITHUB_OUTPUT
+          "publish=$publish" >> $env:GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -73,7 +95,10 @@ jobs:
           }
           $certPath = Join-Path $env:RUNNER_TEMP "DividendFIRE-signing.pfx"
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } | Sort-Object FullName -Descending | Select-Object -First 1
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
           if (-not $signtool) { throw "signtool.exe not found" }
           & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certPath /p $env:WINDOWS_CERT_PASSWORD "dist\DividendFIRE\DividendFIRE.exe"
           if ($LASTEXITCODE -ne 0) { throw "Application signing failed" }
@@ -105,92 +130,27 @@ jobs:
           if (-not (Test-Path $certPath)) {
             [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
           }
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } | Sort-Object FullName -Descending | Select-Object -First 1
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
           if (-not $signtool) { throw "signtool.exe not found" }
           $target = Join-Path "release" $env:INSTALLER_NAME
           & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certPath /p $env:WINDOWS_CERT_PASSWORD $target
           if ($LASTEXITCODE -ne 0) { throw "Installer signing failed" }
 
-      - name: Microsoft Defender scan
+      - name: Record Authenticode status
         shell: pwsh
         run: |
           $target = (Resolve-Path (Join-Path "release" $env:INSTALLER_NAME)).Path
-          $report = Join-Path "release" "SECURITY_SCAN.txt"
-          "Dividend FIRE Windows release security scan" | Out-File $report -Encoding utf8
-          "UTC: $([DateTime]::UtcNow.ToString('u'))" | Out-File $report -Append -Encoding utf8
-          "Target: $env:INSTALLER_NAME" | Out-File $report -Append -Encoding utf8
           $sig = Get-AuthenticodeSignature $target
-          "Authenticode: $($sig.Status)" | Out-File $report -Append -Encoding utf8
+          "Authenticode status: $($sig.Status)" | Out-File "release\AUTHENTICODE.txt" -Encoding utf8
           if ($sig.SignerCertificate) {
-            "Signer: $($sig.SignerCertificate.Subject)" | Out-File $report -Append -Encoding utf8
+            "Signer: $($sig.SignerCertificate.Subject)" | Out-File "release\AUTHENTICODE.txt" -Append -Encoding utf8
+            "Thumbprint: $($sig.SignerCertificate.Thumbprint)" | Out-File "release\AUTHENTICODE.txt" -Append -Encoding utf8
+          } else {
+            "Signer: NONE" | Out-File "release\AUTHENTICODE.txt" -Append -Encoding utf8
           }
-          $mpCandidates = @("$env:ProgramFiles\Windows Defender\MpCmdRun.exe")
-          $platform = Join-Path $env:ProgramData "Microsoft\Windows Defender\Platform"
-          if (Test-Path $platform) {
-            $latest = Get-ChildItem $platform -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
-            if ($latest) { $mpCandidates += (Join-Path $latest.FullName "MpCmdRun.exe") }
-          }
-          $mp = $mpCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $mp) { throw "Microsoft Defender command-line scanner not found" }
-          "Defender scanner: $mp" | Out-File $report -Append -Encoding utf8
-
-          # GitHub-hosted runner work folders can be excluded from AV scanning.
-          # Copy the installer to the normal user C: profile before scanning.
-          $scanDir = Join-Path $env:LOCALAPPDATA "DividendFIRE-DefenderScan"
-          New-Item -ItemType Directory -Path $scanDir -Force | Out-Null
-          $scanTarget = Join-Path $scanDir $env:INSTALLER_NAME
-          Copy-Item $target $scanTarget -Force
-          "Defender scan copy: $scanTarget" | Out-File $report -Append -Encoding utf8
-
-          $scanOutput = & $mp -Scan -ScanType 3 -File $scanTarget 2>&1
-          $scanExit = $LASTEXITCODE
-          $scanOutput | Tee-Object -FilePath $report -Append
-          "Defender exit code: $scanExit" | Out-File $report -Append -Encoding utf8
-
-          $scanText = ($scanOutput | Out-String)
-          if ($scanText -match "was skipped" -or $scanText -match "skipped") {
-            throw "Microsoft Defender skipped the file instead of scanning it"
-          }
-          if ($scanExit -ne 0) {
-            throw "Microsoft Defender scan did not return clean success (exit $scanExit)"
-          }
-          "Defender result: CLEAN" | Out-File $report -Append -Encoding utf8
-          Remove-Item $scanDir -Recurse -Force -ErrorAction SilentlyContinue
-
-      - name: Optional VirusTotal scan
-        shell: pwsh
-        env:
-          VT_API_KEY: ${{ secrets.VT_API_KEY }}
-        run: |
-          $report = Join-Path "release" "SECURITY_SCAN.txt"
-          if ([string]::IsNullOrWhiteSpace($env:VT_API_KEY)) {
-            "VirusTotal: SKIPPED (VT_API_KEY secret not configured)" | Out-File $report -Append -Encoding utf8
-            exit 0
-          }
-          $target = (Resolve-Path (Join-Path "release" $env:INSTALLER_NAME)).Path
-          $json = & curl.exe -sS --request POST --url "https://www.virustotal.com/api/v3/files" --header "x-apikey: $env:VT_API_KEY" --form "file=@$target"
-          if ($LASTEXITCODE -ne 0) { throw "VirusTotal upload failed" }
-          $upload = $json | ConvertFrom-Json
-          $analysisId = $upload.data.id
-          if (-not $analysisId) { throw "VirusTotal did not return an analysis id" }
-          $completed = $false
-          for ($i=0; $i -lt 30; $i++) {
-            Start-Sleep -Seconds 10
-            $analysis = Invoke-RestMethod -Uri "https://www.virustotal.com/api/v3/analyses/$analysisId" -Headers @{"x-apikey"=$env:VT_API_KEY}
-            if ($analysis.data.attributes.status -eq "completed") {
-              $completed = $true
-              $stats = $analysis.data.attributes.stats
-              "VirusTotal malicious: $($stats.malicious)" | Out-File $report -Append -Encoding utf8
-              "VirusTotal suspicious: $($stats.suspicious)" | Out-File $report -Append -Encoding utf8
-              "VirusTotal harmless: $($stats.harmless)" | Out-File $report -Append -Encoding utf8
-              "VirusTotal undetected: $($stats.undetected)" | Out-File $report -Append -Encoding utf8
-              if (($stats.malicious + $stats.suspicious) -gt 0) {
-                throw "VirusTotal reported malicious/suspicious detections"
-              }
-              break
-            }
-          }
-          if (-not $completed) { throw "VirusTotal analysis timed out" }
 
       - name: Compute SHA-256
         shell: pwsh
@@ -198,57 +158,173 @@ jobs:
           $target = Join-Path "release" $env:INSTALLER_NAME
           $hash = Get-FileHash $target -Algorithm SHA256
           "SHA256  $($hash.Hash)  $env:INSTALLER_NAME" | Out-File "release\SHA256.txt" -Encoding ascii
-          "SHA256: $($hash.Hash)" | Out-File "release\SECURITY_SCAN.txt" -Append -Encoding utf8
 
-      - name: Upload Windows installer
+      - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
-          name: DividendFIRE-Windows-Installer
+          name: DividendFIRE-Windows-Build
           path: |
             release/${{ env.INSTALLER_NAME }}
             release/SHA256.txt
-            release/SECURITY_SCAN.txt
+            release/AUTHENTICODE.txt
           if-no-files-found: error
 
-      - name: Detect RELEASE_VERSION change
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: release_request
-        shell: pwsh
-        run: |
-          $changed = git diff --name-only HEAD^ HEAD
-          if ($changed -contains "RELEASE_VERSION") {
-            "publish=true" >> $env:GITHUB_OUTPUT
-            "tag=$env:RELEASE_TAG" >> $env:GITHUB_OUTPUT
-          } else {
-            "publish=false" >> $env:GITHUB_OUTPUT
-          }
+  security-gates:
+    needs: build-windows
+    runs-on: ubuntu-latest
 
-      - name: Publish requested GitHub Release
-        if: steps.release_request.outputs.publish == 'true'
+    steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: DividendFIRE-Windows-Build
+          path: release
+
+      - name: Install ClamAV
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clamav
+          sudo systemctl stop clamav-freshclam 2>/dev/null || true
+          sudo freshclam || true
+          clamscan --version
+
+      - name: ClamAV malware scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPORT="release/SECURITY_SCAN.txt"
+          TARGET="release/${{ needs.build-windows.outputs.installer_name }}"
+          {
+            echo "Dividend FIRE release security report"
+            echo "Target: ${{ needs.build-windows.outputs.installer_name }}"
+            echo "Release: ${{ needs.build-windows.outputs.release_tag }}"
+            echo
+            cat release/AUTHENTICODE.txt
+            echo
+            echo "ClamAV:"
+            clamscan --version
+          } > "$REPORT"
+
+          set +e
+          clamscan --infected "$TARGET" 2>&1 | tee -a "$REPORT"
+          SCAN_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          echo "ClamAV exit code: $SCAN_EXIT" >> "$REPORT"
+          if [ "$SCAN_EXIT" -eq 1 ]; then
+            echo "ClamAV result: DETECTION" >> "$REPORT"
+            exit 1
+          elif [ "$SCAN_EXIT" -ne 0 ]; then
+            echo "ClamAV result: SCAN ERROR" >> "$REPORT"
+            exit "$SCAN_EXIT"
+          fi
+          echo "ClamAV result: CLEAN" >> "$REPORT"
+
+      - name: Optional VirusTotal scan
+        shell: bash
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+        run: |
+          set -euo pipefail
+          REPORT="release/SECURITY_SCAN.txt"
+          TARGET="release/${{ needs.build-windows.outputs.installer_name }}"
+
+          if [ -z "${VT_API_KEY:-}" ]; then
+            echo "VirusTotal: SKIPPED (VT_API_KEY secret not configured)" >> "$REPORT"
+            exit 0
+          fi
+
+          UPLOAD_JSON=$(curl -fsS --request POST             --url "https://www.virustotal.com/api/v3/files"             --header "x-apikey: $VT_API_KEY"             --form "file=@$TARGET")
+
+          ANALYSIS_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["id"])' <<< "$UPLOAD_JSON")
+          if [ -z "$ANALYSIS_ID" ]; then
+            echo "VirusTotal: upload returned no analysis id" >> "$REPORT"
+            exit 1
+          fi
+
+          COMPLETE=0
+          for i in $(seq 1 30); do
+            sleep 10
+            ANALYSIS_JSON=$(curl -fsS               --url "https://www.virustotal.com/api/v3/analyses/$ANALYSIS_ID"               --header "x-apikey: $VT_API_KEY")
+            STATUS=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["attributes"]["status"])' <<< "$ANALYSIS_JSON")
+            if [ "$STATUS" = "completed" ]; then
+              COMPLETE=1
+              MALICIOUS=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["attributes"]["stats"]["malicious"])' <<< "$ANALYSIS_JSON")
+              SUSPICIOUS=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["attributes"]["stats"]["suspicious"])' <<< "$ANALYSIS_JSON")
+              HARMLESS=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["attributes"]["stats"]["harmless"])' <<< "$ANALYSIS_JSON")
+              UNDETECTED=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["attributes"]["stats"]["undetected"])' <<< "$ANALYSIS_JSON")
+              {
+                echo "VirusTotal malicious: $MALICIOUS"
+                echo "VirusTotal suspicious: $SUSPICIOUS"
+                echo "VirusTotal harmless: $HARMLESS"
+                echo "VirusTotal undetected: $UNDETECTED"
+              } >> "$REPORT"
+              if [ $((MALICIOUS + SUSPICIOUS)) -gt 0 ]; then
+                exit 1
+              fi
+              break
+            fi
+          done
+
+          if [ "$COMPLETE" -ne 1 ]; then
+            echo "VirusTotal: analysis timed out" >> "$REPORT"
+            exit 1
+          fi
+          echo "VirusTotal result: CLEAN" >> "$REPORT"
+
+      - name: Append SHA-256
+        shell: bash
+        run: |
+          cat release/SHA256.txt >> release/SECURITY_SCAN.txt
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: DividendFIRE-Security-Reports
+          path: |
+            release/SECURITY_SCAN.txt
+            release/SHA256.txt
+            release/AUTHENTICODE.txt
+          if-no-files-found: error
+
+  publish-release:
+    needs: [build-windows, security-gates]
+    if: needs.build-windows.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: DividendFIRE-Windows-Build
+          path: release
+
+      - name: Download security reports
+        uses: actions/download-artifact@v4
+        with:
+          name: DividendFIRE-Security-Reports
+          path: release
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_request.outputs.tag }}
+          tag_name: ${{ needs.build-windows.outputs.release_tag }}
           target_commitish: ${{ github.sha }}
-          name: Dividend FIRE Simulator ${{ steps.release_request.outputs.tag }}
+          name: Dividend FIRE Simulator ${{ needs.build-windows.outputs.release_tag }}
           body: |
             Windows 배포용 Dividend FIRE Simulator입니다.
 
             - 일반 사용자는 Python 설치가 필요 없습니다.
             - 표준 PyInstaller ONEDIR + Inno Setup 빌드입니다.
-            - Microsoft Defender 빌드단계 검사를 통과한 설치파일만 Release에 게시됩니다.
-            - 코드서명 인증서가 설정된 경우 앱과 설치파일을 Authenticode 서명합니다.
+            - ClamAV 보안 검사를 통과한 빌드만 Release에 게시됩니다.
+            - 코드서명 인증서가 설정된 경우 Authenticode 서명됩니다.
             - VT_API_KEY가 설정된 경우 VirusTotal 검사도 통과해야 게시됩니다.
-            - SHA-256 및 SECURITY_SCAN.txt를 함께 제공합니다.
+            - SECURITY_SCAN.txt와 SHA256.txt를 함께 제공합니다.
+            - GitHub 호스팅 Windows runner의 Defender가 커스텀 파일 검사를 건너뛰는 현상이 확인되어, Defender 통과 여부를 Release 보안 근거로 사용하지 않습니다.
           files: |
-            release/${{ env.INSTALLER_NAME }}
+            release/${{ needs.build-windows.outputs.installer_name }}
             release/SHA256.txt
             release/SECURITY_SCAN.txt
-
-      - name: Publish GitHub Release for tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            release/${{ env.INSTALLER_NAME }}
-            release/SHA256.txt
-            release/SECURITY_SCAN.txt
+            release/AUTHENTICODE.txt
