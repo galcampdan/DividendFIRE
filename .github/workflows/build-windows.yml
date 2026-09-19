@@ -116,17 +116,17 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path "release" -Force | Out-Null
-          $readme = @"
-Dividend FIRE Simulator Portable
-
-1. ZIP을 원하는 폴더에 압축 해제합니다.
-2. DividendFIRE\DividendFIRE.exe 를 실행합니다.
-3. 설치 과정은 없습니다.
-4. 설정은 %LOCALAPPDATA%\DividendFIRE\settings.json 에 저장됩니다.
-
-주의: 프로그램 폴더의 일부 파일만 따로 옮기지 말고 DividendFIRE 폴더 전체를 유지하세요.
-"@
-          Set-Content -Path "dist\PORTABLE_README.txt" -Value $readme -Encoding UTF8
+          $readmeLines = @(
+            "Dividend FIRE Simulator Portable",
+            "",
+            "1. ZIP을 원하는 폴더에 압축 해제합니다.",
+            "2. DividendFIRE\DividendFIRE.exe 를 실행합니다.",
+            "3. 설치 과정은 없습니다.",
+            "4. 설정은 %LOCALAPPDATA%\DividendFIRE\settings.json 에 저장됩니다.",
+            "",
+            "주의: 프로그램 폴더의 일부 파일만 따로 옮기지 말고 DividendFIRE 폴더 전체를 유지하세요."
+          )
+          Set-Content -Path "dist\PORTABLE_README.txt" -Value $readmeLines -Encoding UTF8
           Compress-Archive -Path "dist\DividendFIRE","dist\PORTABLE_README.txt" -DestinationPath (Join-Path "release" $env:PORTABLE_NAME) -CompressionLevel Optimal -Force
 
       - name: Install Inno Setup
