@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -67,6 +69,41 @@ jobs:
             release/DividendFIRE-Setup-v1.0.0.exe
             release/SHA256.txt
           if-no-files-found: error
+
+      - name: Detect RELEASE_VERSION change
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: release_request
+        shell: pwsh
+        run: |
+          $changed = git diff --name-only HEAD^ HEAD
+          if ($changed -contains "RELEASE_VERSION") {
+            $tag = (Get-Content "RELEASE_VERSION" -Raw).Trim()
+            if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+              throw "RELEASE_VERSION must look like v1.2.3"
+            }
+            "publish=true" >> $env:GITHUB_OUTPUT
+            "tag=$tag" >> $env:GITHUB_OUTPUT
+          } else {
+            "publish=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Publish requested GitHub Release
+        if: steps.release_request.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_request.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Dividend FIRE Simulator ${{ steps.release_request.outputs.tag }}
+          body: |
+            Windows 배포용 Dividend FIRE Simulator입니다.
+
+            - 일반 사용자는 Python 설치가 필요 없습니다.
+            - 표준 PyInstaller ONEDIR + Inno Setup 빌드입니다.
+            - 설치 파일과 SHA-256 검증 파일을 함께 제공합니다.
+            - v8.9.3 시뮬레이션 기능과 명목/현재가치 hover 표시가 포함되어 있습니다.
+          files: |
+            release/DividendFIRE-Setup-v1.0.0.exe
+            release/SHA256.txt
 
       - name: Publish GitHub Release for tag
         if: startsWith(github.ref, 'refs/tags/v')
