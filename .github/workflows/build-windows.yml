@@ -23,6 +23,7 @@ jobs:
       release_tag: ${{ steps.version.outputs.release_tag }}
       app_version: ${{ steps.version.outputs.app_version }}
       installer_name: ${{ steps.version.outputs.installer_name }}
+      portable_name: ${{ steps.version.outputs.portable_name }}
       publish: ${{ steps.version.outputs.publish }}
 
     steps:
@@ -48,6 +49,7 @@ jobs:
 
           $appVersion = $tag.Substring(1)
           $installerName = "DividendFIRE-Setup-$tag.exe"
+          $portableName = "DividendFIRE-Portable-$tag.zip"
           $publish = "false"
 
           if ($env:GITHUB_REF -like "refs/tags/v*") {
@@ -62,9 +64,11 @@ jobs:
           "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
           "APP_VERSION=$appVersion" >> $env:GITHUB_ENV
           "INSTALLER_NAME=$installerName" >> $env:GITHUB_ENV
+          "PORTABLE_NAME=$portableName" >> $env:GITHUB_ENV
           "release_tag=$tag" >> $env:GITHUB_OUTPUT
           "app_version=$appVersion" >> $env:GITHUB_OUTPUT
           "installer_name=$installerName" >> $env:GITHUB_OUTPUT
+          "portable_name=$portableName" >> $env:GITHUB_OUTPUT
           "publish=$publish" >> $env:GITHUB_OUTPUT
 
       - name: Set up Python
@@ -107,6 +111,23 @@ jobs:
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
+
+      - name: Build portable ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "release" -Force | Out-Null
+          $readme = @"
+Dividend FIRE Simulator Portable
+
+1. ZIP을 원하는 폴더에 압축 해제합니다.
+2. DividendFIRE\DividendFIRE.exe 를 실행합니다.
+3. 설치 과정은 없습니다.
+4. 설정은 %LOCALAPPDATA%\DividendFIRE\settings.json 에 저장됩니다.
+
+주의: 프로그램 폴더의 일부 파일만 따로 옮기지 말고 DividendFIRE 폴더 전체를 유지하세요.
+"@
+          Set-Content -Path "dist\PORTABLE_README.txt" -Value $readme -Encoding UTF8
+          Compress-Archive -Path "dist\DividendFIRE","dist\PORTABLE_README.txt" -DestinationPath (Join-Path "release" $env:PORTABLE_NAME) -CompressionLevel Optimal -Force
 
       - name: Install Inno Setup
         shell: pwsh
@@ -154,9 +175,12 @@ jobs:
       - name: Compute SHA-256
         shell: pwsh
         run: |
-          $target = Join-Path "release" $env:INSTALLER_NAME
-          $hash = Get-FileHash $target -Algorithm SHA256
-          "SHA256  $($hash.Hash)  $env:INSTALLER_NAME" | Out-File "release\SHA256.txt" -Encoding ascii
+          $installer = Join-Path "release" $env:INSTALLER_NAME
+          $portable = Join-Path "release" $env:PORTABLE_NAME
+          $installerHash = Get-FileHash $installer -Algorithm SHA256
+          $portableHash = Get-FileHash $portable -Algorithm SHA256
+          "SHA256  $($installerHash.Hash)  $env:INSTALLER_NAME" | Out-File "release\SHA256.txt" -Encoding ascii
+          "SHA256  $($portableHash.Hash)  $env:PORTABLE_NAME" | Out-File "release\SHA256.txt" -Append -Encoding ascii
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
@@ -164,6 +188,7 @@ jobs:
           name: DividendFIRE-Windows-Build
           path: |
             release/${{ env.INSTALLER_NAME }}
+            release/${{ env.PORTABLE_NAME }}
             release/SHA256.txt
             release/AUTHENTICODE.txt
           if-no-files-found: error
@@ -195,9 +220,11 @@ jobs:
           set -euo pipefail
           REPORT="release/SECURITY_SCAN.txt"
           TARGET="release/${{ needs.build-windows.outputs.installer_name }}"
+          PORTABLE="release/${{ needs.build-windows.outputs.portable_name }}"
           {
             echo "Dividend FIRE release security report"
-            echo "Target: ${{ needs.build-windows.outputs.installer_name }}"
+            echo "Installer: ${{ needs.build-windows.outputs.installer_name }}"
+            echo "Portable: ${{ needs.build-windows.outputs.portable_name }}"
             echo "Release: ${{ needs.build-windows.outputs.release_tag }}"
             echo
             cat release/AUTHENTICODE.txt
@@ -207,7 +234,7 @@ jobs:
           } > "$REPORT"
 
           set +e
-          clamscan --infected "$TARGET" 2>&1 | tee -a "$REPORT"
+          clamscan --infected "$TARGET" "$PORTABLE" 2>&1 | tee -a "$REPORT"
           SCAN_EXIT=${PIPESTATUS[0]}
           set -e
 
@@ -316,6 +343,8 @@ jobs:
             Windows 배포용 Dividend FIRE Simulator입니다.
 
             - 일반 사용자는 Python 설치가 필요 없습니다.
+            - 설치형 EXE와 무설치 Portable ZIP을 함께 제공합니다.
+            - Portable ZIP은 압축 해제 후 DividendFIRE\DividendFIRE.exe를 실행하면 됩니다.
             - 표준 PyInstaller ONEDIR + Inno Setup 빌드입니다.
             - ClamAV 보안 검사를 통과한 빌드만 Release에 게시됩니다.
             - 코드서명 인증서가 설정된 경우 Authenticode 서명됩니다.
@@ -324,6 +353,7 @@ jobs:
             - GitHub 호스팅 Windows runner의 Defender가 커스텀 파일 검사를 건너뛰는 현상이 확인되어, Defender 통과 여부를 Release 보안 근거로 사용하지 않습니다.
           files: |
             release/${{ needs.build-windows.outputs.installer_name }}
+            release/${{ needs.build-windows.outputs.portable_name }}
             release/SHA256.txt
             release/SECURITY_SCAN.txt
             release/AUTHENTICODE.txt
