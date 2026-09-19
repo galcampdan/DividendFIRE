@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   build-windows:
@@ -87,25 +88,25 @@ jobs:
         run: |
           python -m PyInstaller --clean --noconfirm DividendFIRE.spec
 
-      - name: Optional Authenticode sign application
-        shell: pwsh
-        env:
-          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
-          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASSWORD)) {
-            Write-Host "Code signing not configured; continuing unsigned."
-            exit 0
-          }
-          $certPath = Join-Path $env:RUNNER_TEMP "DividendFIRE-signing.pfx"
-          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1
-          if (-not $signtool) { throw "signtool.exe not found" }
-          & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certPath /p $env:WINDOWS_CERT_PASSWORD "dist\DividendFIRE\DividendFIRE.exe"
-          if ($LASTEXITCODE -ne 0) { throw "Application signing failed" }
+      - name: Azure login for Artifact Signing
+        if: ${{ vars.AZURE_ARTIFACT_SIGNING_ENABLED == 'true' }}
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign application with Azure Artifact Signing
+        if: ${{ vars.AZURE_ARTIFACT_SIGNING_ENABLED == 'true' }}
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\dist\DividendFIRE\DividendFIRE.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
 
       - name: Install Inno Setup
         shell: pwsh
@@ -120,31 +121,22 @@ jobs:
         run: |
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:APP_VERSION" "installer\DividendFIRE.iss"
 
-      - name: Optional Authenticode sign installer
+      - name: Sign installer with Azure Artifact Signing
+        if: ${{ vars.AZURE_ARTIFACT_SIGNING_ENABLED == 'true' }}
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\release\${{ env.INSTALLER_NAME }}
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Verify and record Authenticode status
         shell: pwsh
         env:
-          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
-          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASSWORD)) {
-            Write-Host "Code signing not configured; installer remains unsigned."
-            exit 0
-          }
-          $certPath = Join-Path $env:RUNNER_TEMP "DividendFIRE-signing.pfx"
-          if (-not (Test-Path $certPath)) {
-            [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
-          }
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1
-          if (-not $signtool) { throw "signtool.exe not found" }
-          $target = Join-Path "release" $env:INSTALLER_NAME
-          & $signtool.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certPath /p $env:WINDOWS_CERT_PASSWORD $target
-          if ($LASTEXITCODE -ne 0) { throw "Installer signing failed" }
-
-      - name: Record Authenticode status
-        shell: pwsh
+          SIGNING_ENABLED: ${{ vars.AZURE_ARTIFACT_SIGNING_ENABLED }}
         run: |
           $target = (Resolve-Path (Join-Path "release" $env:INSTALLER_NAME)).Path
           $sig = Get-AuthenticodeSignature $target
@@ -154,6 +146,9 @@ jobs:
             "Thumbprint: $($sig.SignerCertificate.Thumbprint)" | Out-File "release\AUTHENTICODE.txt" -Append -Encoding utf8
           } else {
             "Signer: NONE" | Out-File "release\AUTHENTICODE.txt" -Append -Encoding utf8
+          }
+          if ($env:SIGNING_ENABLED -eq "true" -and $sig.Status -ne "Valid") {
+            throw "Artifact Signing is enabled but installer Authenticode status is $($sig.Status)"
           }
 
       - name: Compute SHA-256
