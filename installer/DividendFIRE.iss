@@ -1,5 +1,7 @@
 #define MyAppName "Dividend FIRE Simulator"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "Dividend FIRE"
 #define MyAppExeName "DividendFIRE.exe"
 
@@ -13,7 +15,7 @@ DefaultGroupName={#MyAppName}
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=..\release
-OutputBaseFilename=DividendFIRE-Setup-v1.0.0
+OutputBaseFilename=DividendFIRE-Setup-v{#MyAppVersion}
 SetupIconFile=..\assets\app.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/normal
@@ -24,7 +26,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 RestartApplications=no
-VersionInfoVersion=1.0.0.0
+VersionInfoVersion={#MyAppVersion}.0
 VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}
 
