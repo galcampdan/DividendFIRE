@@ -1,11 +1,11 @@
-<!-- FIRE_BUILD_ID=v2.0.5-salary-growth-1 -->
+<!-- FIRE_BUILD_ID=v2.0.6-employment-start-1 -->
 <!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Dividend FIRE Simulator v2.0.5</title>
-  <link rel="stylesheet" href="style.css?v=2.0.5-tooltip-layout-1">
+  <title>Dividend FIRE Simulator v2.0.6</title>
+  <link rel="stylesheet" href="style.css?v=2.0.6-employment-start-1">
 </head>
 <body>
 <main class="shell">
@@ -15,9 +15,9 @@
       <h1>🔥 Dividend FIRE Simulator</h1>
       <p class="subtitle">ETF 포트폴리오 · 월 적립 · 배당 성장 · 세금 · 물가 · FIRE 이후 생활까지 계산합니다.</p>
     </div>
-    <div class="hero-badge">v2.0.5 · WEB / TAURI</div>
+    <div class="hero-badge">v2.0.6 · WEB / TAURI</div>
   </header>
-  <div id="buildProof" class="build-proof">v2.0.5 · 공용 계산 코어 확인 중…</div>
+  <div id="buildProof" class="build-proof">v2.0.6 · 공용 계산 코어 확인 중…</div>
   <nav class="mobile-quick-nav" aria-label="빠른 이동">
     <a href="#inputsPanel">입력</a>
     <a href="#resultsPanel">결과</a>
@@ -33,6 +33,7 @@
         <label><span>현재 투자자산</span><div class="input-unit"><input id="initial" type="number" min="0" step="100" value="3000"><em>만원</em></div></label>
         <label><span>초봉 월급</span><div class="input-unit"><input id="income" type="number" min="0" step="10" value="300"><em>만원</em></div></label>
         <label><span>연봉 상승률</span><div class="input-unit"><input id="salaryGrowth" type="number" min="-50" max="100" step="0.1" value="3.0"><em>%/년</em></div></label>
+        <label><span>취업 시작연도</span><div class="input-unit"><input id="employmentStartYear" type="number" min="1900" max="2300" step="1" value=""><em>년</em></div></label>
         <label><span>월 생활비 (현재 기준)</span><div class="input-unit"><input id="fireexp" type="number" min="0" step="10" value="250"><em>만원</em></div></label>
         <label><span>기본 월 적립금</span><div class="input-unit"><input id="contrib" type="number" min="0" step="10" value="100"><em>만원</em></div></label>
       </div>
@@ -135,6 +136,6 @@
     <a href="#resultsPanel">결과 보기</a>
   </div>
 </main>
-<script src="app.js?v=2.0.5-tooltip-layout-1"></script>
+<script src="app.js?v=2.0.6-employment-start-1"></script>
 </body>
 </html>

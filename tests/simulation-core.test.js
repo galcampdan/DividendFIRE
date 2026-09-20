@@ -66,3 +66,23 @@ assert.strictEqual(salary24.salaryIncome,3630000,'annual salary growth should co
 assert.strictEqual(salary12.salaryYear,1);
 assert.strictEqual(salaryRise.salaryGrowth,0.10);
 console.log('salary growth compounding test: PASS');
+
+const delayedJob=core.simulate({
+  ...base,
+  startYear:2026,
+  startMonth:1,
+  monthlyIncome:3000000,
+  salaryGrowth:10,
+  employmentStartYear:2030,
+  fireExpenses:10000000,
+  years:6,
+  cashflowEnabled:true
+},market);
+assert.strictEqual(delayedJob.rows.find(r=>r.month===0).salaryIncome,0,'salary must be zero before employment');
+assert.strictEqual(delayedJob.cashflowIncome,0,'current cashflow salary must be zero when employment starts in the future');
+assert.strictEqual(delayedJob.rows.find(r=>r.month===36).salaryIncome,0,'2029 salary should still be zero');
+assert.strictEqual(delayedJob.rows.find(r=>r.month===48).salaryIncome,3000000,'2030 employment starts at the configured starting salary');
+assert.strictEqual(delayedJob.rows.find(r=>r.month===60).salaryIncome,3300000,'salary growth begins after the first employment year');
+assert.strictEqual(delayedJob.rows.find(r=>r.month===72).salaryIncome,3630000,'salary growth compounds from employment year, not simulation start');
+assert.strictEqual(delayedJob.employmentStartYear,2030);
+console.log('delayed employment start test: PASS');

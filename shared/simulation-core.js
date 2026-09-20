@@ -45,6 +45,7 @@ function simulate(p,market){
   var initial=Math.max(0,num(p.initialCapital));
   var monthlyIncome=Math.max(0,num(p.monthlyIncome));
   var salaryGrowth=clamp(num(p.salaryGrowth,3)/100,-.50,1.00);
+  var employmentStartYear=clamp(parseInt(p.employmentStartYear==null?startYear:p.employmentStartYear,10)||startYear,1900,2300);
   var monthlyContrib=Math.max(0,num(p.monthlyContribution));
   var cashflowEnabled=p.cashflowEnabled===true;
   var schedule={};
@@ -144,15 +145,16 @@ function simulate(p,market){
   }
   function makeRow(m,st,phase,shortfall,sale,saleTax,applied){
     var total=(startMonth-1)+m,cy=startYear+Math.floor(total/12),cm=(total%12)+1,age=currentAge+m/12;
-    var completedSalaryYears=Math.max(0,Math.floor(m/12));
-    var grownSalary=monthlyIncome*Math.pow(1+salaryGrowth,completedSalaryYears);
-    var salaryIncome=(m===0||phase!=='FIRE')?grownSalary:0;
+    var employmentActive=cy>=employmentStartYear;
+    var completedSalaryYears=employmentActive?Math.max(0,cy-employmentStartYear):0;
+    var grownSalary=employmentActive?monthlyIncome*Math.pow(1+salaryGrowth,completedSalaryYears):0;
+    var salaryIncome=employmentActive&&(m===0||phase!=='FIRE')?grownSalary:0;
     var fireOtherIncome=phase==='FIRE'?st.postFireIncome:0;
     var monthlyCashIncome=salaryIncome+fireOtherIncome;
     var totalCashIn=monthlyCashIncome+st.netDividend;
     return {month:m,year:Math.round((m/12)*100)/100,phase:phase,calendarYear:cy,calendarMonth:cm,age:Math.round(age*100)/100,
       assets:rnd(st.assets),securities:rnd(st.securities),cash:rnd(cash),contributed:rnd(contributed),monthlyContribution:rnd(applied||0),
-      salaryIncome:rnd(salaryIncome),salaryGrowth:salaryGrowth,salaryYear:completedSalaryYears,fireOtherIncome:rnd(fireOtherIncome),monthlyCashIncome:rnd(monthlyCashIncome),totalCashIn:rnd(totalCashIn),
+      salaryIncome:rnd(salaryIncome),salaryGrowth:salaryGrowth,salaryYear:completedSalaryYears,employmentStartYear:employmentStartYear,employmentActive:employmentActive,fireOtherIncome:rnd(fireOtherIncome),monthlyCashIncome:rnd(monthlyCashIncome),totalCashIn:rnd(totalCashIn),
       grossDividend:rnd(st.grossDividend),netDividend:rnd(st.netDividend),dividendTax:rnd(st.dividendTax),
       grossWithdrawal:rnd(st.grossWithdrawalCapacity),netWithdrawal:rnd(st.netWithdrawalCapacity),withdrawalTax:rnd(st.withdrawalCapacityTax),
       livingCost:rnd(st.livingCost),postFireIncome:rnd(st.postFireIncome),requiredFromPortfolio:rnd(st.requiredFromPortfolio),
@@ -210,7 +212,7 @@ function simulate(p,market){
   var ysum=stats.reduce(function(s,x){return s+num(x.yield)*num(x.weight);},0);
   var weightedDistributionGrowth=ysum>0?stats.reduce(function(s,x){return s+num(x.distribution_growth)*num(x.yield)*num(x.weight);},0)/ysum:0;
   var currentMonthlyContribution=scheduledContribution(0);
-  var cashflowIncome=monthlyIncome;
+  var cashflowIncome=rows.length?rows[0].salaryIncome:0;
   var cashflowDividend=st0.netDividend;
   var cashflowTotalInflow=cashflowIncome+cashflowDividend;
   var cashflowLivingCost=fireExp;
@@ -223,7 +225,7 @@ function simulate(p,market){
   Object.keys(schedule).sort(function(a,b){return Number(a)-Number(b);}).forEach(function(y){sortedSchedule[y]=rnd(schedule[y]);});
 
   return {
-    rows:rows,stats:stats,fireMode:fireMode,withdrawalRate:withdrawalRate,salaryGrowth:salaryGrowth,currentAge:currentAge,startYear:startYear,startMonth:startMonth,
+    rows:rows,stats:stats,fireMode:fireMode,withdrawalRate:withdrawalRate,salaryGrowth:salaryGrowth,employmentStartYear:employmentStartYear,currentAge:currentAge,startYear:startYear,startMonth:startMonth,
     fireMonth:fireMonth,fireAssets:fireAssets==null?null:rnd(fireAssets),fireContributed:fireContributed==null?null:rnd(fireContributed),
     postFireFailureMonth:postFireFailureMonth,depletedMonth:depletedMonth,finalAssets:rnd(final.assets),finalCash:rnd(cash),
     weightedYield:weightedYield,weightedPriceGrowth:weightedPriceGrowth,weightedDistributionGrowth:weightedDistributionGrowth,
