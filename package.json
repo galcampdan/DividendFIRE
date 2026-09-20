@@ -1,0 +1,11 @@
+{
+  "name":"dividend-fire",
+  "private":true,
+  "version":"2.0.2",
+  "type":"module",
+  "scripts":{
+    "test:core":"node tests/simulation-core.test.js",
+    "test:mobile":"node tests/mobile-e2e.mjs"
+  },
+  "devDependencies":{"playwright":"1.55.0"}
+}

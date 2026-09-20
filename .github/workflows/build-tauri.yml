@@ -31,6 +31,28 @@ jobs:
           test -f site/simulation-core.js
           test -f site/manifest.webmanifest
           grep -q "simulation-core.js" site/index.html
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install mobile QA browser
+        run: |
+          npm install --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Start local static site
+        run: |
+          python -m http.server 4173 --directory site > /tmp/dividendfire-http.log 2>&1 &
+          echo $! > /tmp/dividendfire-http.pid
+          sleep 2
+      - name: Mobile E2E QA
+        run: npm run test:mobile
+      - name: Upload mobile QA screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-ux-qa
+          path: test-results/mobile-390.png
+          if-no-files-found: ignore
 
   build-windows:
     needs: test-core

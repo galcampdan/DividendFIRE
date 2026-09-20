@@ -3,9 +3,9 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dividend FIRE Simulator v8.9.3</title>
-  <link rel="stylesheet" href="style.css?v=8.9.3-nominal-real-hover-1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dividend FIRE Simulator v2.0.2</title>
+  <link rel="stylesheet" href="style.css?v=2.0.2-mobile-ux-1">
 </head>
 <body>
 <main class="shell">
@@ -15,12 +15,17 @@
       <h1>🔥 Dividend FIRE Simulator</h1>
       <p class="subtitle">ETF 포트폴리오 · 월 적립 · 배당 성장 · 세금 · 물가 · FIRE 이후 생활까지 계산합니다.</p>
     </div>
-    <div class="hero-badge">v8.9.3 · NOMINAL / REAL HOVER</div>
+    <div class="hero-badge">v2.0.2 · WEB / TAURI</div>
   </header>
-  <div id="buildProof" class="build-proof">FRONTEND v8.9.3 · 백엔드 확인 중… · 명목/현재가치 hover + 연도별 적립</div>
+  <div id="buildProof" class="build-proof">v2.0.2 · 공용 계산 코어 확인 중…</div>
+  <nav class="mobile-quick-nav" aria-label="빠른 이동">
+    <a href="#inputsPanel">입력</a>
+    <a href="#resultsPanel">결과</a>
+    <a href="#cashflowPanel">Cashflow</a>
+  </nav>
 
   <section class="layout">
-    <aside class="panel controls">
+    <aside id="inputsPanel" class="panel controls">
       <div class="section-head"><h2>입력</h2><div class="input-meta"><span>만원 기준</span><span id="saveStatus" class="save-status">불러오는 중…</span></div></div>
       <h3>현금흐름</h3>
       <div class="form-grid">
@@ -33,11 +38,19 @@
       <label class="switch-row cashflow-toggle"><input id="cashflowEnabled" type="checkbox"><span>Cashflow 보기 <small>(월 소득 + 세후 배당 → 생활비 · 납입 · 잔여)</small></span></label>
       <div id="cashflowHint" class="hint"></div>
 
-      <div class="section-head annual-contrib-head"><h3>년도별 월 적립금</h3><button id="resetContributionSchedule" class="secondary-small" type="button">연도별 설정 초기화</button></div>
-      <div class="annual-contrib-note">빈칸은 <b>기본 월 적립금</b>을 그대로 사용합니다. 특정 연도만 금액을 넣으면 그 해의 매월 납입액만 바뀝니다. FIRE 도달 후에는 자동으로 0원입니다.</div>
-      <div id="contributionSchedule" class="annual-contrib-grid" aria-label="년도별 월 적립금 설정"></div>
+      <details id="annualDetails" class="fold-section annual-fold">
+        <summary><span>연도별 월 적립금</span><small id="annualSummary">기본 월 적립금 사용</small></summary>
+        <div class="fold-body">
+          <div class="fold-toolbar"><span>특정 연도만 예외 금액을 넣으세요.</span><button id="resetContributionSchedule" class="secondary-small" type="button">초기화</button></div>
+          <div class="annual-contrib-note">빈칸은 <b>기본 월 적립금</b>을 그대로 사용합니다. FIRE 도달 후에는 자동으로 0원입니다.</div>
+          <div id="contributionSchedule" class="annual-contrib-grid" aria-label="년도별 월 적립금 설정"></div>
+          <button id="showMoreContributionYears" class="secondary-wide" type="button">향후 연도 더 보기</button>
+        </div>
+      </details>
 
-      <h3>FIRE 가정</h3>
+      <details id="fireDetails" class="fold-section">
+        <summary><span>FIRE 가정</span><small id="fireSummary">계산 방식 / 생활비 / 물가</small></summary>
+        <div class="fold-body">
       <div class="mode-switch" role="radiogroup" aria-label="FIRE 방식">
         <label><input type="radio" name="fireMode" value="withdrawal" checked><span>n% 인출</span></label>
         <label><input type="radio" name="fireMode" value="dividend"><span>배당소득 생활</span></label>
@@ -53,8 +66,13 @@
         <label id="dividendStressField" class="mode-hidden"><span>배당 스트레스</span><div class="input-unit"><input id="stress" type="number" min="0" max="90" value="0"><em>% 감소</em></div></label>
       </div>
       <label class="switch-row"><input id="reinvest" type="checkbox" checked><span>세후 배당 재투자 <small>(FIRE 후에는 생활비 초과분만)</small></span></label>
+        </div>
+      </details>
 
-      <div class="section-head portfolio-title"><h3>포트폴리오</h3><strong id="weightTotal">100.0%</strong></div>
+      <details id="portfolioDetails" class="fold-section">
+        <summary><span>포트폴리오</span><small id="portfolioSummary">SCHD · JEPQ</small></summary>
+        <div class="fold-body">
+      <div class="section-head portfolio-title"><h3>비중 / 성장 가정</h3><strong id="weightTotal">100.0%</strong></div>
       <div class="assumption-note">영상 논리대로 <b>현재 분배율</b>은 LIVE 데이터를 쓰고, 미래는 종목별 <b>가격 성장률</b>과 <b>분배금 성장률</b>을 따로 가정합니다. 아래 숫자는 예측이 아니라 수정 가능한 기본값입니다.</div>
       <div id="portfolio" class="portfolio"></div>
       <div class="add-row">
@@ -63,18 +81,20 @@
         <button id="addTicker" type="button">추가</button>
       </div>
       <div id="tickerStatus" class="hint"></div>
-      <button id="run" class="primary" type="button">시뮬레이션 실행</button>
+        </div>
+      </details>
+      <button id="run" class="primary desktop-run" type="button">시뮬레이션 실행</button>
       <div id="status" class="status" aria-live="polite"></div>
     </aside>
 
-    <section class="panel results">
+    <section id="resultsPanel" class="panel results">
       <div class="section-head"><h2>결과</h2><span id="fxBadge">환율 불러오는 중</span></div>
       <div class="cards">
         <article class="metric fire"><span id="fireLabel">n% Withdrawal FIRE</span><strong id="fireCard">-</strong><small id="fireSub">-</small></article>
         <article class="metric"><span>시뮬레이션 종료 자산</span><strong id="assetCard">-</strong><small id="assetSub">-</small></article>
-        <article class="metric"><span id="currentCashLabel">현재 세후 월 인출가능액</span><strong id="currentDivCard">-</strong><small id="yieldCard">-</small></article>
+        <article class="metric current-cash"><span id="currentCashLabel">현재 세후 월 인출가능액</span><strong id="currentDivCard">-</strong><small id="yieldCard">-</small></article>
         <article class="metric"><span id="finalCashLabel">최종 세후 월 인출가능액</span><strong id="finalDivCard">-</strong><small id="finalLivingSub">-</small></article>
-        <article class="metric"><span>월 잔여현금</span><strong id="surplusCard">-</strong><small>생활비 · 납입 · 배당재투자 반영</small></article>
+        <article class="metric remaining-cash"><span>월 잔여현금</span><strong id="surplusCard">-</strong><small>생활비 · 납입 · 배당재투자 반영</small></article>
         <article class="metric"><span>누적 예상 세금</span><strong id="taxCard">-</strong><small id="taxSub">배당세 + 인출 시 추정 매도세</small></article>
       </div>
 
@@ -95,15 +115,25 @@
       <section class="chart-card"><div class="chart-head"><div><h3>자산 성장 · FIRE 전/후</h3><p>FIRE 도달 이후에는 월 적립을 중단하고 실제 생활비를 지출합니다.</p></div></div><div id="assetChart" class="chart"></div></section>
       <section class="chart-card"><div class="chart-head"><div><h3 id="cashChartTitle">현금흐름</h3><p id="cashChartDesc">-</p></div></div><div id="divChart" class="chart"></div></section>
 
-      <section class="table-section">
-        <div class="section-head"><h3>ETF 데이터 / 미래 가정</h3><span>과거 실적 ≠ 미래</span></div>
-        <div class="table-wrap"><table><thead><tr><th>Ticker</th><th>비중</th><th>현재가</th><th>원화(만원)</th><th>TTM 분배율</th><th>과거 총수익 CAGR</th><th>기간</th><th>가격 성장 가정</th><th>분배금 성장 가정</th><th>데이터</th></tr></thead><tbody id="stats"></tbody></table></div>
-      </section>
+      <details class="fold-section result-fold data-fold">
+        <summary><span>ETF 데이터 / 미래 가정</span><small>과거 실적 ≠ 미래</small></summary>
+        <div class="fold-body table-section">
+          <div class="table-wrap"><table><thead><tr><th>Ticker</th><th>비중</th><th>현재가</th><th>원화(만원)</th><th>TTM 분배율</th><th>과거 총수익 CAGR</th><th>기간</th><th>가격 성장 가정</th><th>분배금 성장 가정</th><th>데이터</th></tr></thead><tbody id="stats"></tbody></table></div>
+        </div>
+      </details>
 
-      <div class="notice"><strong>모델 주의</strong><p>v8.9.3은 새 버전 전용 포트에서 실행되며 프런트/백엔드 빌드를 확인합니다. 입력값과 포트폴리오, 연도별 월 적립금 설정은 settings.json 한 파일에 저장합니다. 실제 연도·나이를 시간축에 표시하고 그래프 마우스오버로 해당 시점의 명목금액과 현재가치(실질금액)를 함께 확인할 수 있습니다. 초기 현금흐름과 분배금 성장, 물가는 계속 분리 계산합니다. FIRE 전에는 적립/재투자를 하고 FIRE 이후에는 적립을 멈춥니다. 배당생활 모드는 원금을 팔지 않고, n% 인출 모드는 배당을 먼저 쓰고 부족분만 매도합니다. 종목별 성장률은 예측값이 아니라 사용자가 조정하는 가정입니다. 세금·건보료는 계획용 간이 추정입니다.</p></div>
+      <details class="fold-section result-fold model-fold">
+        <summary><span>모델 / 세금 가정</span><small>계산 주의사항</small></summary>
+        <div class="notice"><strong>모델 주의</strong><p>v8.9.3은 새 버전 전용 포트에서 실행되며 프런트/백엔드 빌드를 확인합니다. 입력값과 포트폴리오, 연도별 월 적립금 설정은 settings.json 한 파일에 저장합니다. 실제 연도·나이를 시간축에 표시하고 그래프 마우스오버로 해당 시점의 명목금액과 현재가치(실질금액)를 함께 확인할 수 있습니다. 초기 현금흐름과 분배금 성장, 물가는 계속 분리 계산합니다. FIRE 전에는 적립/재투자를 하고 FIRE 이후에는 적립을 멈춥니다. 배당생활 모드는 원금을 팔지 않고, n% 인출 모드는 배당을 먼저 쓰고 부족분만 매도합니다. 종목별 성장률은 예측값이 아니라 사용자가 조정하는 가정입니다. 세금·건보료는 계획용 간이 추정입니다.</p></div>
+      </details>
     </section>
   </section>
+
+  <div class="mobile-action-bar" aria-label="모바일 실행 메뉴">
+    <button id="mobileRun" type="button">계산하기</button>
+    <a href="#resultsPanel">결과 보기</a>
+  </div>
 </main>
-<script src="app.js?v=8.9.3-nominal-real-hover-1"></script>
+<script src="app.js?v=2.0.2-mobile-ux-1"></script>
 </body>
 </html>

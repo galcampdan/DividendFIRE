@@ -1,19 +1,25 @@
 
-const EXPECTED_APP_VERSION='v8.9.3';
-const EXPECTED_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
+const UI_VERSION='v2.0.2';
+const MODERN_BUILD='2026-09-20-v2.0.2-mobile-ux-1';
+const LEGACY_APP_VERSION='v8.9.3';
+const LEGACY_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
 async function verifyBuild(){
   const proof=$('#buildProof');
   try{
     const r=await fetch('/api/version?ts='+Date.now(),{cache:'no-store'});
     const j=await r.json();
-    if(!r.ok||j.version!==EXPECTED_APP_VERSION||j.build!==EXPECTED_BUILD){
-      if(proof){proof.textContent=`⚠ 빌드 불일치: frontend ${EXPECTED_APP_VERSION} / backend ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
-      throw new Error('구버전 서버가 열려 있습니다. 새로 열린 v8.9.3 탭을 사용하세요.');
+    const modern=!!(j.web||j.platform==='web'||j.platform==='tauri');
+    const ok=modern
+      ? (j.version===UI_VERSION&&j.build===MODERN_BUILD)
+      : (j.version===LEGACY_APP_VERSION&&j.build===LEGACY_BUILD);
+    if(!r.ok||!ok){
+      if(proof){proof.textContent=`⚠ 빌드 불일치: UI ${UI_VERSION} / runtime ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
+      throw new Error('앱 파일 버전이 서로 다릅니다. 새로고침하거나 최신 버전을 사용하세요.');
     }
-    if(proof){proof.textContent='✓ FRONTEND v8.9.3 · BACKEND v8.9.3 VERIFIED · 명목/현재가치 hover + 연도별 적립';proof.classList.add('ok');}
+    if(proof){proof.textContent=modern?'✓ v2.0.2 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
     return true;
   }catch(e){
-    if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ v8.9.3 백엔드 확인 실패: '+e.message;proof.classList.add('bad');}
+    if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ 실행 환경 확인 실패: '+e.message;proof.classList.add('bad');}
     throw e;
   }
 }
@@ -28,6 +34,35 @@ let portfolio = [
 ];
 let saveTimer = null;
 let contributionSchedule = {}; // {calendarYear: monthlyContributionManwon}; restored with settings
+let showAllContributionYears = false;
+let scrollResultsAfterRun = false;
+const mobileQuery = window.matchMedia('(max-width: 700px)');
+function isMobileUI(){ return mobileQuery.matches; }
+function updateFoldSummaries(){
+  const annual=$('#annualSummary');
+  if(annual){
+    const n=Object.keys(contributionSchedule).length,base=Number($('#contrib')?.value)||0;
+    annual.textContent=n?`기본 ${base.toLocaleString('ko-KR')}만 · 예외 ${n}개`:`기본 ${base.toLocaleString('ko-KR')}만/월`;
+  }
+  const fire=$('#fireSummary');
+  if(fire){
+    fire.textContent=`${fireMode()==='withdrawal'?'n% 인출':'배당생활'} · 생활비 ${Number($('#fireexp')?.value||0).toLocaleString('ko-KR')}만 · 물가 ${Number($('#inflation')?.value||0).toFixed(1)}%`;
+  }
+  const pfSummary=$('#portfolioSummary');
+  if(pfSummary){
+    pfSummary.textContent=portfolio.slice(0,3).map(x=>`${x.ticker} ${Number(x.weight||0).toFixed(0)}%`).join(' · ')+(portfolio.length>3?` 외 ${portfolio.length-3}`:'');
+  }
+}
+function syncResponsiveFolds(initial=false){
+  const ids=['annualDetails','fireDetails','portfolioDetails'];
+  if(!isMobileUI()){
+    ids.forEach(id=>{const d=$('#'+id);if(d)d.open=true;});
+  }else if(initial){
+    ids.forEach(id=>{const d=$('#'+id);if(d)d.open=false;});
+  }
+}
+mobileQuery.addEventListener?.('change',()=>{showAllContributionYears=false;syncResponsiveFolds(true);renderContributionSchedule();});
+
 
 
 function settingsSnapshot(){
@@ -133,7 +168,7 @@ function renderPF(){
     row.querySelector('.dist-growth').addEventListener('input',e=>{portfolio[i].distributionGrowth=clamp(e.target.value,-50,50);scheduleSave();});
     row.querySelector('.remove').addEventListener('click',()=>{if(portfolio.length<=1)return;portfolio.splice(i,1);rebalanceAfterDelete();renderPF();scheduleSave();});
     pf.appendChild(row);
-  });syncWeightControls();
+  });syncWeightControls();updateFoldSummaries();
 }
 async function addTicker(){
   const input=$('#newTicker'),ticker=sanitizeTicker(input.value),status=$('#tickerStatus');if(!ticker)return;
@@ -156,22 +191,30 @@ function renderContributionSchedule(){
   const validYears=new Set(Array.from({length:count},(_,i)=>String(start+i)));
   Object.keys(contributionSchedule).forEach(y=>{if(!validYears.has(y)) delete contributionSchedule[y];});
   box.innerHTML='';
+  const visibleCount=isMobileUI()&&!showAllContributionYears?Math.min(10,count):count;
   const frag=document.createDocumentFragment();
-  for(let i=0;i<count;i++){
+  for(let i=0;i<visibleCount;i++){
     const year=start+i, key=String(year), row=document.createElement('label');
     row.className='annual-contrib-row';
     const has=Object.prototype.hasOwnProperty.call(contributionSchedule,key);
-    row.innerHTML=`<span>${year}년</span><div class="input-unit"><input class="annual-contrib-input" data-year="${year}" type="number" min="0" step="10" value="${has?contributionSchedule[key]:''}" placeholder="${base}"><em>만원/월</em></div>`;
+    row.innerHTML=`<span>${year}년</span><div class="input-unit"><input class="annual-contrib-input" data-year="${year}" type="number" inputmode="decimal" min="0" step="10" value="${has?contributionSchedule[key]:''}" placeholder="${base}"><em>만원/월</em></div>`;
     const input=row.querySelector('input');
     input.addEventListener('input',()=>{
       const raw=input.value.trim();
       if(raw==='') delete contributionSchedule[key];
       else contributionSchedule[key]=Math.max(0,Number(raw)||0);
-      updateCashflowHint(); scheduleSave();
+      updateCashflowHint();updateFoldSummaries();scheduleSave();
     });
     frag.appendChild(row);
   }
   box.appendChild(frag);
+  const more=$('#showMoreContributionYears');
+  if(more){
+    const hidden=count-visibleCount;
+    more.hidden=hidden<=0;
+    more.textContent=hidden>0?`향후 ${hidden}개 연도 더 보기`:'';
+  }
+  updateFoldSummaries();
 }
 function annualContributionPayload(){
   const out={};
@@ -197,7 +240,7 @@ function updateModeUI(){
   $('#cashChartTitle').textContent=withdrawal?'인출 여력 vs 필요 생활비':'배당 구매력 vs 필요 생활비';
   $('#cashChartDesc').textContent=withdrawal?'FIRE 이후에는 배당을 먼저 쓰고 부족한 생활비만 자산을 매도합니다.':'FIRE 이후에는 적립을 멈추고 배당으로 생활하며, 초과분만 재투자합니다.';
   $('#modeHelp').textContent=withdrawal?`연 ${(+$('#withdrawalRate').value||0).toFixed(1)}% 인출 한도로 FIRE 여부를 판단합니다.`:'초기 분배율뿐 아니라 분배금 성장률이 물가를 따라가는지도 함께 봅니다.';
-  updateCashflowVisibility();
+  updateCashflowVisibility();updateFoldSummaries();
 }
 function cashflowEnabled(){return $('#cashflowEnabled')?.checked===true;}
 function updateCashflowVisibility(){
@@ -226,11 +269,12 @@ function updateCashflowHint(){
   if(base<0){el.textContent=`⚠ ${year}년 기준 소득에서 생활비·납입을 빼면 ${manwon(manwonInput(-base))} 부족합니다. Cashflow를 켜면 배당까지 포함한 상세 흐름을 볼 수 있습니다.`;el.className='hint bad';}
   else{el.textContent=`${year}년 기준 소득 - 생활비 - 납입 = ${manwon(manwonInput(base))}/월 · Cashflow를 켜면 세후 배당도 합산합니다.`;el.className='hint';}
 }
-['income','fireexp'].forEach(id=>$('#'+id).addEventListener('input',updateCashflowHint));
-$('#contrib').addEventListener('input',()=>{renderContributionSchedule();updateCashflowHint();});
+['income','fireexp'].forEach(id=>$('#'+id).addEventListener('input',()=>{updateCashflowHint();updateFoldSummaries();}));
+$('#contrib').addEventListener('input',()=>{renderContributionSchedule();updateCashflowHint();updateFoldSummaries();});
 $('#years').addEventListener('change',()=>{renderContributionSchedule();scheduleSave();});
-$('#years').addEventListener('input',()=>{renderContributionSchedule();});
-$('#resetContributionSchedule').addEventListener('click',()=>{contributionSchedule={};renderContributionSchedule();updateCashflowHint();scheduleSave();});
+$('#years').addEventListener('input',()=>{showAllContributionYears=false;renderContributionSchedule();});
+$('#resetContributionSchedule').addEventListener('click',()=>{contributionSchedule={};showAllContributionYears=false;renderContributionSchedule();updateCashflowHint();scheduleSave();});
+$('#showMoreContributionYears')?.addEventListener('click',()=>{showAllContributionYears=true;renderContributionSchedule();});
 
 function niceMax(max){if(!isFinite(max)||max<=0)return 1;const exp=Math.pow(10,Math.floor(Math.log10(max))),m=max/exp;return(m<=1?1:m<=2?2:m<=5?5:10)*exp;}
 function compactKRW(v){const man=(Number(v)||0)/10000;return man.toLocaleString('ko-KR',{maximumFractionDigits:man<100?1:0})+'만원';}
@@ -243,7 +287,8 @@ function nearestRowIndex(rows,targetYear){let bi=0,d=Infinity;for(let i=0;i<rows
 function nearestRow(rows,targetYear){return rows[nearestRowIndex(rows,targetYear)];}
 function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
   if(typeof container._chartCleanup==='function'){try{container._chartCleanup();}catch(_){}}
-  const W=900,H=326,pad={l:78,r:24,t:38,b:58},plotW=W-pad.l-pad.r,plotH=H-pad.t-pad.b;
+  const mobile=isMobileUI();
+  const W=mobile?360:900,H=mobile?270:326,pad=mobile?{l:54,r:12,t:46,b:48}:{l:78,r:24,t:38,b:58},plotW=W-pad.l-pad.r,plotH=H-pad.t-pad.b;
   const values=rows.flatMap(r=>series.map(s=>Number(r[s.key])||0));
   const ymax=niceMax(Math.max(...values,1)),xmax=Math.max(1,Number(rows.at(-1)?.year)||1);
   const x=yr=>pad.l+(yr/xmax)*plotW,y=val=>pad.t+plotH-(val/ymax)*plotH;
@@ -252,7 +297,7 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
     const val=ymax*i/4,yy=y(val);
     svg+=`<line class="gridline" x1="${pad.l}" y1="${yy}" x2="${W-pad.r}" y2="${yy}"/><text class="axis" x="${pad.l-9}" y="${yy+4}" text-anchor="end">${compactKRW(val)}</text>`;
   }
-  [0,.25,.5,.75,1].forEach(f=>{
+  (mobile?[0,.5,1]:[0,.25,.5,.75,1]).forEach(f=>{
     const target=xmax*f,r=nearestRow(rows,target),xx=x(Number(r.year)||0);
     svg+=`<text class="axis axis-time" x="${xx}" y="${H-28}" text-anchor="middle"><tspan x="${xx}" dy="0">${r.calendarYear}년</tspan><tspan x="${xx}" dy="13">${ageText(r.age)}</tspan></text>`;
   });
@@ -260,7 +305,7 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
     const cls=['series-a','series-b','series-c'][si]||'series-c';
     const points=rows.map(r=>`${x(Number(r.year)||0).toFixed(1)},${y(Number(r[s.key])||0).toFixed(1)}`).join(' ');
     svg+=`<polyline class="${cls}" points="${points}"/>`;
-    const lx=pad.l+si*190;
+    const lx=pad.l+si*(mobile?145:190);
     svg+=`<line class="${cls}" x1="${lx}" y1="16" x2="${lx+22}" y2="16"/><text class="legend" x="${lx+28}" y="20">${s.label}</text>`;
   });
   if(fireMonth!=null&&fireMonth/12<=xmax){
@@ -397,7 +442,8 @@ async function runSimulation(){
     }
     $('#finalDivCard').textContent=manwon(j.finalNetCashflow)+'/월';
     $('#finalLivingSub').textContent=withdrawal?`최종 포트폴리오 필요액 ${manwon(j.finalRequiredFromPortfolio)}/월`:`실질 월배당 ${manwon(j.finalRealNetDividend)} · 현재가치 필요액 ${manwon(j.finalRealRequired)}`;
-    $('#surplusCard').textContent=manwon(j.cashflowRemaining);$('#surplusCard').closest('.metric').classList.toggle('negative',j.cashflowRemaining<0);
+    const remaining=cashflowEnabled()?j.cashflowRemaining:j.baseMonthlyRemaining;
+    $('#surplusCard').textContent=manwon(remaining);$('#surplusCard').closest('.metric').classList.toggle('negative',remaining<0);
     renderCashflow(j);
     $('#taxCard').textContent=manwon(j.cumulativeTax);$('#taxSub').textContent=`배당세 ${manwon(j.cumulativeDividendTax)} · 매도세 ${manwon(j.cumulativeSaleTax)}`;
     $('#fxBadge').textContent=`USD/KRW ${Math.round(j.usdkrw).toLocaleString('ko-KR')} · ${j.fxSource.includes('DEMO')?'DEMO':'LIVE'}`;
@@ -405,15 +451,19 @@ async function runSimulation(){
     drawChart($('#divChart'),j.rows,withdrawal?[{key:'netWithdrawal',label:'세후 n% 인출여력'},{key:'requiredFromPortfolio',label:'필요 생활비'}]:[{key:'netDividend',label:'세후 월배당'},{key:'requiredFromPortfolio',label:'필요 생활비'}],j.fireMonth,j.fireMode);
     $('#stats').innerHTML=j.stats.map(s=>{const local=s.currency==='USD'?usd(s.price):manwon(s.price),src=s.source.includes('DEMO')?'⚠ DEMO':'LIVE',cls=s.source.includes('DEMO')?'demo':'live',hy=Number(s.history_years||0),hl=hy>=4.75?'약 5년':`${hy.toFixed(1)}년`;return `<tr><td><strong>${s.ticker}</strong></td><td>${pct01(s.weight)}</td><td>${local}</td><td>${manwon(s.price_krw)}</td><td>${pct01(s.yield)}</td><td>${pct01(s.historical_total_return_cagr)}</td><td>${hl}</td><td>${pct01(s.price_growth)}</td><td>${pct01(s.distribution_growth)}</td><td class="${cls}">${src}</td></tr>`;}).join('');
     const demo=j.stats.filter(s=>s.source.includes('DEMO')).map(s=>s.ticker);status.textContent=demo.length?`완료 · DEMO fallback: ${demo.join(', ')}`:'완료 · 모든 종목 LIVE 데이터 사용';
+    if(scrollResultsAfterRun&&isMobileUI()){scrollResultsAfterRun=false;requestAnimationFrame(()=>$('#resultsPanel')?.scrollIntoView({behavior:'smooth',block:'start'}));}
   }catch(e){status.textContent='오류: '+e.message;status.className='status error';}finally{btn.disabled=false;}
 }
 $('#run').addEventListener('click',runSimulation);
+$('#mobileRun')?.addEventListener('click',()=>{scrollResultsAfterRun=true;runSimulation();});
 async function boot(){
   await verifyBuild();
   await loadSettings();
   renderPF();
+  syncResponsiveFolds(true);
   renderContributionSchedule();
   updateModeUI();
+  updateFoldSummaries();
   updateCashflowHint();
   bindAutoSave();
   scheduleSave();

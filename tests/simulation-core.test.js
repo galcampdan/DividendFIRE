@@ -36,3 +36,9 @@ const cfSpend=core.simulate({
 },market);
 assert.strictEqual(cfSpend.cashflowRemaining,3050000,'legacy fixedExpenses must be ignored and unreinvested dividend remains spendable');
 console.log('cashflow tests: PASS');
+
+const ready=core.simulate({...base,monthlyIncome:3000000,fireExpenses:0,monthlyContribution:1000000,reinvest:true,cashflowEnabled:true},market);
+assert.strictEqual(ready.fireMonth,0);
+assert.strictEqual(ready.cashflowContribution,1000000,'cashflow reflects the user current contribution even if FIRE-ready now');
+assert.strictEqual(ready.baseMonthlyRemaining,2000000);
+console.log('cashflow FIRE-ready display test: PASS');

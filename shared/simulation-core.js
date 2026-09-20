@@ -201,13 +201,14 @@ function simulate(p,market){
   var weightedPriceGrowth=stats.reduce(function(s,x){return s+num(x.price_growth)*num(x.weight);},0);
   var ysum=stats.reduce(function(s,x){return s+num(x.yield)*num(x.weight);},0);
   var weightedDistributionGrowth=ysum>0?stats.reduce(function(s,x){return s+num(x.distribution_growth)*num(x.yield)*num(x.weight);},0)/ysum:0;
-  var currentMonthlyContribution=fireMonth===0?0:scheduledContribution(0);
+  var currentMonthlyContribution=scheduledContribution(0);
   var cashflowIncome=monthlyIncome;
   var cashflowDividend=st0.netDividend;
   var cashflowTotalInflow=cashflowIncome+cashflowDividend;
   var cashflowLivingCost=fireExp;
   var cashflowContribution=currentMonthlyContribution;
   var cashflowDividendReinvest=reinvest?cashflowDividend:0;
+  var baseMonthlyRemaining=cashflowIncome-cashflowLivingCost-cashflowContribution;
   var cashflowRemaining=cashflowTotalInflow-cashflowLivingCost-cashflowContribution-cashflowDividendReinvest;
   var realFactor=Math.pow(1+inflation,years);
   var sortedSchedule={};
@@ -218,7 +219,7 @@ function simulate(p,market){
     fireMonth:fireMonth,fireAssets:fireAssets==null?null:rnd(fireAssets),fireContributed:fireContributed==null?null:rnd(fireContributed),
     postFireFailureMonth:postFireFailureMonth,depletedMonth:depletedMonth,finalAssets:rnd(final.assets),finalCash:rnd(cash),
     weightedYield:weightedYield,weightedPriceGrowth:weightedPriceGrowth,weightedDistributionGrowth:weightedDistributionGrowth,
-    cashflowEnabled:cashflowEnabled,monthlySurplus:rnd(cashflowRemaining),currentMonthlyContribution:rnd(currentMonthlyContribution),
+    cashflowEnabled:cashflowEnabled,monthlySurplus:rnd(baseMonthlyRemaining),baseMonthlyRemaining:rnd(baseMonthlyRemaining),currentMonthlyContribution:rnd(currentMonthlyContribution),
     cashflowIncome:rnd(cashflowIncome),cashflowDividend:rnd(cashflowDividend),cashflowTotalInflow:rnd(cashflowTotalInflow),
     cashflowLivingCost:rnd(cashflowLivingCost),cashflowContribution:rnd(cashflowContribution),
     cashflowDividendReinvest:rnd(cashflowDividendReinvest),cashflowRemaining:rnd(cashflowRemaining),

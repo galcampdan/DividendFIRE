@@ -10,9 +10,9 @@ for src,name in [(SHARED/"simulation-core.js","simulation-core.js"),(WEB/"web-ap
     shutil.copy2(src,SITE/name)
 (SITE/"data").mkdir(exist_ok=True);shutil.copy2(WEB/"data"/"market.json",SITE/"data"/"market.json");(SITE/".nojekyll").write_text("",encoding="utf-8")
 index=(SITE/"index.html").read_text(encoding="utf-8")
-index=index.replace('<link rel="stylesheet" href="style.css?v=8.9.3-nominal-real-hover-1">','<meta name="theme-color" content="#111111">\n  <meta name="apple-mobile-web-app-capable" content="yes">\n  <meta name="apple-mobile-web-app-status-bar-style" content="default">\n  <link rel="manifest" href="manifest.webmanifest">\n  <link rel="icon" href="app-icon.svg" type="image/svg+xml">\n  <link rel="stylesheet" href="style.css?v=8.9.3-nominal-real-hover-1">')
-needle='<script src="app.js?v=8.9.3-nominal-real-hover-1"></script>'
-replacement='<script src="simulation-core.js?v=2"></script>\n<script src="web-api.js?v=2"></script>\n<script src="pwa.js?v=2"></script>\n'+needle
+index=index.replace('<link rel="stylesheet" href="style.css?v=2.0.2-mobile-ux-1">','<meta name="theme-color" content="#111111">\n  <meta name="apple-mobile-web-app-capable" content="yes">\n  <meta name="apple-mobile-web-app-status-bar-style" content="default">\n  <link rel="manifest" href="manifest.webmanifest">\n  <link rel="icon" href="app-icon.svg" type="image/svg+xml">\n  <link rel="stylesheet" href="style.css?v=2.0.2-mobile-ux-1">')
+needle='<script src="app.js?v=2.0.2-mobile-ux-1"></script>'
+replacement='<script src="simulation-core.js?v=2.0.2"></script>\n<script src="web-api.js?v=2.0.2"></script>\n<script src="pwa.js?v=2.0.2"></script>\n'+needle
 if needle not in index: raise SystemExit("app.js script tag not found")
 (SITE/"index.html").write_text(index.replace(needle,replacement),encoding="utf-8")
 print("Prepared cross-platform static site at",SITE)
