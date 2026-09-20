@@ -61,13 +61,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with: {workspaces: "desktop/src-tauri -> target"}
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Install Tauri CLI
         shell: pwsh
-        run: cargo install tauri-cli --version "^2.0" --locked
+        run: npm install --global @tauri-apps/cli@latest
       - name: Build Tauri portable executable
         shell: pwsh
         working-directory: desktop
-        run: cargo tauri build --no-bundle
+        run: tauri build --no-bundle
       - name: Package portable ZIP
         shell: pwsh
         run: |
