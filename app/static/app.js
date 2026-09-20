@@ -1,6 +1,6 @@
 
-const UI_VERSION='v2.0.8';
-const MODERN_BUILD='2026-09-20-v2.0.8-realistic-prefill-1';
+const UI_VERSION='v2.0.9';
+const MODERN_BUILD='2026-09-20-v2.0.9-soft-haptics-1';
 const LEGACY_APP_VERSION='v8.9.3';
 const LEGACY_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
 async function verifyBuild(){
@@ -16,7 +16,7 @@ async function verifyBuild(){
       if(proof){proof.textContent=`⚠ 빌드 불일치: UI ${UI_VERSION} / runtime ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
       throw new Error('앱 파일 버전이 서로 다릅니다. 새로고침하거나 최신 버전을 사용하세요.');
     }
-    if(proof){proof.textContent=modern?'✓ v2.0.8 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
+    if(proof){proof.textContent=modern?'✓ v2.0.9 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
     return true;
   }catch(e){
     if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ 실행 환경 확인 실패: '+e.message;proof.classList.add('bad');}
@@ -351,7 +351,7 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal',sh
     const now=performance.now();
     if(now-lastHapticAt<18)return;
     lastHapticAt=now;
-    try{navigator.vibrate(7);}catch(_){}
+    try{navigator.vibrate(3);}catch(_){}
   }
 
   function renderRow(r,idx,clientX=null,clientY=null,showTip=true){

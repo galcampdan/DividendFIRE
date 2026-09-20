@@ -1,4 +1,4 @@
-const CACHE='dividend-fire-pwa-v2026-09-20-11';
+const CACHE='dividend-fire-pwa-v2026-09-20-12';
 const SHELL=['./','./index.html','./style.css','./simulation-core.js','./web-api.js','./app.js','./manifest.webmanifest','./app-icon.svg','./data/market.json'];
 
 self.addEventListener('install',event=>{
