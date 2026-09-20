@@ -22,6 +22,8 @@ try{
     await page.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
     await page.goto(baseURL,{waitUntil:'networkidle'});
     await page.waitForSelector('#resultsPanel');
+    await fs.mkdir('test-results',{recursive:true});
+    await page.screenshot({path:`test-results/mobile-${vp.width}-initial.png`,fullPage:true});
 
     assert.equal(errors.length,0,`page errors at ${vp.width}: ${errors.join('; ')}`);
     const overflow=await page.evaluate(()=>Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-window.innerWidth);
@@ -65,8 +67,7 @@ try{
 
       const overflowOpen=await page.evaluate(()=>Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-window.innerWidth);
       assert.ok(overflowOpen<=1,`overflow after interactions: ${overflowOpen}`);
-      await fs.mkdir('test-results',{recursive:true});
-      await page.screenshot({path:'test-results/mobile-390.png',fullPage:true});
+      await page.screenshot({path:'test-results/mobile-390-cashflow.png',fullPage:true});
     }
     await context.close();
   }
