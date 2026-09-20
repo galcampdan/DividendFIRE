@@ -59,6 +59,16 @@ try{
     }
 
     if(vp.width===390){
+      // First-visit defaults: useful demo values, while saved user settings still override them.
+      assert.equal(await page.locator('#age').inputValue(),'25');
+      assert.equal(await page.locator('#initial').inputValue(),'3000');
+      assert.equal(await page.locator('#income').inputValue(),'400');
+      assert.equal(await page.locator('#salaryGrowth').inputValue(),'4.0');
+      assert.equal(await page.locator('#employmentStartYear').inputValue(),String(new Date().getFullYear()));
+      assert.equal(await page.locator('#fireexp').inputValue(),'200');
+      assert.equal(await page.locator('#contrib').inputValue(),'120');
+      assert.equal(await page.locator('#cashflowEnabled').isChecked(),true);
+
       await page.locator('#initial').fill('60000');
       await page.locator('#income').fill('300');
       await page.locator('#salaryGrowth').fill('10');
@@ -67,6 +77,7 @@ try{
       await page.locator('#contrib').fill('100');
 
       // With Cashflow off, dividends must not silently inflate spendable monthly remainder.
+      await page.locator('#cashflowEnabled').uncheck();
       await page.locator('#mobileRun').click();
       await waitDone(page);
       assert.match(await page.locator('#surplusCard').innerText(),/50/,'base remainder should be income - living - contribution');
