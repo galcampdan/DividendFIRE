@@ -1,6 +1,6 @@
 
-const UI_VERSION='v2.0.2';
-const MODERN_BUILD='2026-09-20-v2.0.2-mobile-ux-1';
+const UI_VERSION='v2.0.3';
+const MODERN_BUILD='2026-09-20-v2.0.3-cashflow-haptics-1';
 const LEGACY_APP_VERSION='v8.9.3';
 const LEGACY_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
 async function verifyBuild(){
@@ -16,7 +16,7 @@ async function verifyBuild(){
       if(proof){proof.textContent=`⚠ 빌드 불일치: UI ${UI_VERSION} / runtime ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
       throw new Error('앱 파일 버전이 서로 다릅니다. 새로고침하거나 최신 버전을 사용하세요.');
     }
-    if(proof){proof.textContent=modern?'✓ v2.0.2 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
+    if(proof){proof.textContent=modern?'✓ v2.0.3 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
     return true;
   }catch(e){
     if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ 실행 환경 확인 실패: '+e.message;proof.classList.add('bad');}
@@ -285,7 +285,7 @@ function calendarText(row,withMonth=true){if(!row)return '-';const y=Number(row.
 function milestoneText(month,j){if(month==null)return null;const total=(Number(j.startMonth||1)-1)+Number(month);const y=Number(j.startYear||new Date().getFullYear())+Math.floor(total/12);const m=(total%12)+1;const age=Number(j.currentAge||0)+Number(month)/12;return {year:y,month:m,age,main:`${y}년 · ${ageText(age)}`,sub:`${m}월 · ${(Number(month)/12).toFixed(1)}년 후`};}
 function nearestRowIndex(rows,targetYear){let bi=0,d=Infinity;for(let i=0;i<rows.length;i++){const nd=Math.abs((Number(rows[i].year)||0)-targetYear);if(nd<d){d=nd;bi=i;}}return bi;}
 function nearestRow(rows,targetYear){return rows[nearestRowIndex(rows,targetYear)];}
-function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
+function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal',showCashflow=false){
   if(typeof container._chartCleanup==='function'){try{container._chartCleanup();}catch(_){}}
   const mobile=isMobileUI();
   const W=mobile?360:900,H=mobile?270:326,pad=mobile?{l:54,r:12,t:46,b:48}:{l:78,r:24,t:38,b:58},plotW=W-pad.l-pad.r,plotH=H-pad.t-pad.b;
@@ -323,13 +323,27 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
   const dots=Array.from(svgEl.querySelectorAll('.hover-dot'));
   const dotGroup=svgEl.querySelector('.hover-dots');
   const readout=container.querySelector('.chart-readout');
-  let pinned=false,currentIndex=0;
+  let pinned=false,currentIndex=0,touching=false,lastTouchIndex=null,lastTouchAt=0,lastHapticAt=0,ignoreMouseUntil=0;
+  const mobileInstruction='그래프를 손가락으로 문지르면 해당 시점이 표시됩니다. 손을 떼면 사라집니다.';
 
-  function hide(){
-    if(pinned)return;
-    tip.classList.remove('visible');
+  function resetMobileReadout(){
+    if(!mobile)return;
+    readout.textContent=mobileInstruction;
+    readout.classList.remove('active');
+  }
+  function hide(force=false){
+    if(pinned&&!force)return;
+    tip.classList.remove('visible','pinned');
     hover.setAttribute('visibility','hidden');
     dotGroup.setAttribute('visibility','hidden');
+    if(force)resetMobileReadout();
+  }
+  function hapticTick(){
+    if(!mobile||typeof navigator.vibrate!=='function')return;
+    const now=performance.now();
+    if(now-lastHapticAt<18)return;
+    lastHapticAt=now;
+    try{navigator.vibrate(7);}catch(_){}
   }
 
   function renderRow(r,idx,clientX=null,clientY=null,showTip=true){
@@ -348,7 +362,13 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
     const monthlyLabel=isWithdrawal?'세후 월 인출 가능액':'세후 월 배당금';
     const realNetMonthly=currentValueKRW(netMonthly,r);
     const realGrossMonthly=currentValueKRW(grossMonthly,r);
-    const body=`<div class="tooltip-monthly"><span>${monthlyLabel}</span><b>명목 ${compactKRW(netMonthly)}/월</b><strong>현재가치 ${compactKRW(realNetMonthly)}/월</strong><small>세전 명목 ${compactKRW(grossMonthly)}/월 · 현재가치 ${compactKRW(realGrossMonthly)}/월</small></div>`+
+    const salary=Number(r.salaryIncome)||0;
+    const fireOther=Number(r.fireOtherIncome)||0;
+    const dividend=Number(r.netDividend)||0;
+    const totalCash=Number(r.totalCashIn)||salary+fireOther+dividend;
+    const realTotalCash=currentValueKRW(totalCash,r);
+    const cashflowBody=showCashflow?`<div class="tooltip-cashflow"><span>월 Cashflow</span><b>총 ${compactKRW(totalCash)}/월</b><strong>현재가치 ${compactKRW(realTotalCash)}/월</strong><small>월급 ${compactKRW(salary)} + 세후배당 ${compactKRW(dividend)}${fireOther>0?` + FIRE 후 기타소득 ${compactKRW(fireOther)}`:''}</small></div>`:'';
+    const body=cashflowBody+`<div class="tooltip-monthly"><span>${monthlyLabel}</span><b>명목 ${compactKRW(netMonthly)}/월</b><strong>현재가치 ${compactKRW(realNetMonthly)}/월</strong><small>세전 명목 ${compactKRW(grossMonthly)}/월 · 현재가치 ${compactKRW(realGrossMonthly)}/월</small></div>`+
       series.map(s=>nominalRealHTML(s.label,r[s.key],r)).join('')+
       nominalRealHTML('월 적립금',r.monthlyContribution||0,r,'/월')+
       nominalRealHTML('생활비 필요액',r.requiredFromPortfolio,r,'/월');
@@ -368,7 +388,8 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
     tip.classList.toggle('visible',showTip);
     tip.classList.toggle('pinned',pinned);
 
-    readout.innerHTML=`<strong>${calendarText(r,true)}</strong><span>${r.phase==='FIRE'?'🔥 FIRE 생활기':'축적기'}</span><b class="readout-monthly">${monthlyLabel} 명목 ${compactKRW(netMonthly)}/월 · 현재가치 ${compactKRW(realNetMonthly)}/월</b>${series.map(s=>`<b>${s.label} ${compactKRW(r[s.key])} (현재가치 ${compactKRW(currentValueKRW(r[s.key],r))})</b>`).join('')}<b>월 적립 ${compactKRW(r.monthlyContribution||0)} (현재가치 ${compactKRW(currentValueKRW(r.monthlyContribution||0,r))})</b><b>생활비 ${compactKRW(r.requiredFromPortfolio)} (현재가치 ${compactKRW(currentValueKRW(r.requiredFromPortfolio,r))})</b>`;
+    const cashflowReadout=showCashflow?`<b class="readout-cashflow">Cashflow ${compactKRW(totalCash)}/월 = 월급 ${compactKRW(salary)} + 세후배당 ${compactKRW(dividend)}${fireOther>0?` + FIRE 후 기타소득 ${compactKRW(fireOther)}`:''}</b>`:'';
+    readout.innerHTML=`<strong>${calendarText(r,true)}</strong><span>${r.phase==='FIRE'?'🔥 FIRE 생활기':'축적기'}</span>${cashflowReadout}<b class="readout-monthly">${monthlyLabel} 명목 ${compactKRW(netMonthly)}/월 · 현재가치 ${compactKRW(realNetMonthly)}/월</b>${series.map(s=>`<b>${s.label} ${compactKRW(r[s.key])} (현재가치 ${compactKRW(currentValueKRW(r[s.key],r))})</b>`).join('')}<b>월 적립 ${compactKRW(r.monthlyContribution||0)} (현재가치 ${compactKRW(currentValueKRW(r.monthlyContribution||0,r))})</b><b>생활비 ${compactKRW(r.requiredFromPortfolio)} (현재가치 ${compactKRW(currentValueKRW(r.requiredFromPortfolio,r))})</b>`;
     readout.classList.add('active');
   }
 
@@ -381,18 +402,26 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
     return nearestRowIndex(rows,frac*xmax);
   }
   function showFromPointer(ev){
+    if(touching||Date.now()<ignoreMouseUntil||ev.pointerType==='touch')return;
     const idx=indexFromClientX(ev.clientX);
     renderRow(rows[idx],idx,ev.clientX,ev.clientY,true);
   }
+  function showFromTouch(t,withHaptic=false){
+    if(!t)return;
+    const idx=indexFromClientX(t.clientX);
+    if(withHaptic&&lastTouchIndex!=null&&idx!==lastTouchIndex)hapticTick();
+    lastTouchIndex=idx;
+    renderRow(rows[idx],idx,t.clientX,t.clientY,true);
+  }
 
-  // Guaranteed hover path: listen on the whole chart stage in capture phase.
-  // This keeps working even if SVG children or overlays become the event target.
+  // Desktop hover remains hover/click. Touch scrubbing is deliberately non-sticky.
   ['pointermove','mousemove'].forEach(type=>stage.addEventListener(type,showFromPointer,true));
   stage.addEventListener('pointerenter',showFromPointer,true);
   stage.addEventListener('mouseenter',showFromPointer,true);
-  stage.addEventListener('pointerleave',hide,true);
-  stage.addEventListener('mouseleave',hide,true);
+  stage.addEventListener('pointerleave',()=>hide(),true);
+  stage.addEventListener('mouseleave',()=>hide(),true);
   stage.addEventListener('click',ev=>{
+    if(mobile||Date.now()-lastTouchAt<800)return;
     pinned=!pinned;
     showFromPointer(ev);
     tip.classList.toggle('pinned',pinned);
@@ -400,14 +429,25 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
   });
   stage.addEventListener('touchstart',ev=>{
     const t=ev.touches&&ev.touches[0];if(!t)return;
-    pinned=true;
-    const idx=indexFromClientX(t.clientX);
-    renderRow(rows[idx],idx,t.clientX,t.clientY,true);
+    touching=true;pinned=false;lastTouchAt=Date.now();ignoreMouseUntil=Date.now()+900;lastTouchIndex=null;
+    showFromTouch(t,false);
   },{passive:true,capture:true});
+  stage.addEventListener('touchmove',ev=>{
+    const t=ev.touches&&ev.touches[0];if(!t||!touching)return;
+    ignoreMouseUntil=Date.now()+900;
+    showFromTouch(t,true);
+  },{passive:true,capture:true});
+  const finishTouch=()=>{
+    touching=false;pinned=false;lastTouchAt=Date.now();ignoreMouseUntil=Date.now()+900;lastTouchIndex=null;
+    hide(true);
+  };
+  stage.addEventListener('touchend',finishTouch,{passive:true,capture:true});
+  stage.addEventListener('touchcancel',finishTouch,{passive:true,capture:true});
 
   // Last-resort desktop path: track pointer at window level and map it back to this chart.
   // This bypasses SVG/overlay/browser hit-testing differences entirely.
   const globalMove=ev=>{
+    if(touching||Date.now()<ignoreMouseUntil||ev.pointerType==='touch')return;
     const r=stage.getBoundingClientRect();
     const inside=ev.clientX>=r.left&&ev.clientX<=r.right&&ev.clientY>=r.top&&ev.clientY<=r.bottom;
     if(inside) showFromPointer(ev);
@@ -420,8 +460,9 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal'){
     window.removeEventListener('mousemove',globalMove,true);
   };
 
-  // Show a persistent initial readout so hover status is visible before interaction.
+  // Desktop keeps the initial readout. Mobile starts clean until the user scrubs.
   renderRow(rows[0],0,null,null,false);
+  if(mobile)resetMobileReadout();
 }
 
 async function runSimulation(){
@@ -447,8 +488,8 @@ async function runSimulation(){
     renderCashflow(j);
     $('#taxCard').textContent=manwon(j.cumulativeTax);$('#taxSub').textContent=`배당세 ${manwon(j.cumulativeDividendTax)} · 매도세 ${manwon(j.cumulativeSaleTax)}`;
     $('#fxBadge').textContent=`USD/KRW ${Math.round(j.usdkrw).toLocaleString('ko-KR')} · ${j.fxSource.includes('DEMO')?'DEMO':'LIVE'}`;
-    drawChart($('#assetChart'),j.rows,[{key:'assets',label:'총자산'},{key:'contributed',label:'누적 납입'}],j.fireMonth,j.fireMode);
-    drawChart($('#divChart'),j.rows,withdrawal?[{key:'netWithdrawal',label:'세후 n% 인출여력'},{key:'requiredFromPortfolio',label:'필요 생활비'}]:[{key:'netDividend',label:'세후 월배당'},{key:'requiredFromPortfolio',label:'필요 생활비'}],j.fireMonth,j.fireMode);
+    drawChart($('#assetChart'),j.rows,[{key:'assets',label:'총자산'},{key:'contributed',label:'누적 납입'}],j.fireMonth,j.fireMode,j.cashflowEnabled);
+    drawChart($('#divChart'),j.rows,withdrawal?[{key:'netWithdrawal',label:'세후 n% 인출여력'},{key:'requiredFromPortfolio',label:'필요 생활비'}]:[{key:'netDividend',label:'세후 월배당'},{key:'requiredFromPortfolio',label:'필요 생활비'}],j.fireMonth,j.fireMode,j.cashflowEnabled);
     $('#stats').innerHTML=j.stats.map(s=>{const local=s.currency==='USD'?usd(s.price):manwon(s.price),src=s.source.includes('DEMO')?'⚠ DEMO':'LIVE',cls=s.source.includes('DEMO')?'demo':'live',hy=Number(s.history_years||0),hl=hy>=4.75?'약 5년':`${hy.toFixed(1)}년`;return `<tr><td><strong>${s.ticker}</strong></td><td>${pct01(s.weight)}</td><td>${local}</td><td>${manwon(s.price_krw)}</td><td>${pct01(s.yield)}</td><td>${pct01(s.historical_total_return_cagr)}</td><td>${hl}</td><td>${pct01(s.price_growth)}</td><td>${pct01(s.distribution_growth)}</td><td class="${cls}">${src}</td></tr>`;}).join('');
     const demo=j.stats.filter(s=>s.source.includes('DEMO')).map(s=>s.ticker);status.textContent=demo.length?`완료 · DEMO fallback: ${demo.join(', ')}`:'완료 · 모든 종목 LIVE 데이터 사용';
     if(scrollResultsAfterRun&&isMobileUI()){scrollResultsAfterRun=false;requestAnimationFrame(()=>$('#resultsPanel')?.scrollIntoView({behavior:'smooth',block:'start'}));}

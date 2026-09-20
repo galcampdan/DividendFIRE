@@ -1,7 +1,7 @@
 // Dividend FIRE browser/Tauri adapter. Math lives in shared/simulation-core.js.
 (function(){
 'use strict';
-var WEB_VERSION='v2.0.2',WEB_BUILD='2026-09-20-v2.0.2-mobile-ux-1',SETTINGS_KEY='DividendFireMVP.settings.v2';
+var WEB_VERSION='v2.0.3',WEB_BUILD='2026-09-20-v2.0.3-cashflow-haptics-1',SETTINGS_KEY='DividendFireMVP.settings.v2';
 var nativeFetch=window.fetch.bind(window),marketPromise=null;
 var DEMO={
 VOO:{ticker:'VOO',currency:'USD',price:600,ttm_dps:7.2,yield:.012,historical_total_return_cagr:.10,history_years:5,default_price_growth:.055,default_distribution_growth:.05,source:'DEMO FALLBACK'},

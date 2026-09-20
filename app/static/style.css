@@ -208,3 +208,14 @@ body{min-width:0}button,input,select,summary,a{touch-action:manipulation}
   .cashflow-list{grid-template-columns:1fr}
   .cashflow-list .cashflow-total,.cashflow-list .cashflow-balance{grid-column:auto}
 }
+
+/* v2.0.3 cashflow hover + mobile scrub haptics */
+.tooltip-cashflow{margin:7px 0;padding:9px 10px;border-radius:10px;background:#111;color:#fff;display:grid;gap:2px}
+.tooltip-cashflow span{font-size:10px;opacity:.72;text-transform:uppercase;letter-spacing:.04em}
+.tooltip-cashflow b{font-size:15px}.tooltip-cashflow strong{font-size:12px}.tooltip-cashflow small{font-size:10px;line-height:1.35;opacity:.78}
+.readout-cashflow{color:#111;font-weight:850}
+@media(max-width:700px){
+  .chart-stage{touch-action:pan-y;-webkit-user-select:none;user-select:none}
+  .chart-readout:not(.active){min-height:28px;display:flex;align-items:center;color:#777}
+  .tooltip-cashflow{padding:8px 9px}.tooltip-cashflow b{font-size:14px}
+}

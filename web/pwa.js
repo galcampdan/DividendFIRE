@@ -13,7 +13,7 @@
 
   window.addEventListener('load',async function(){
     try{
-      const reg=await navigator.serviceWorker.register('./service-worker.js?v=20260920-4',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./service-worker.js?v=20260920-5',{updateViaCache:'none'});
       await reg.update();
     }catch(err){
       console.warn('PWA service worker registration failed',err);

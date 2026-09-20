@@ -73,6 +73,37 @@ try{
       assert.match(await page.locator('#cfRemaining').innerText(),/50/);
       assert.match(await page.locator('#currentDivCard').innerText(),/555/);
 
+      // Touch-scrub tooltip: salary + dividend must appear, movement should haptic-tick,
+      // and lifting the finger must clear the hover overlay.
+      const scrub=await page.evaluate(()=>{
+        const stage=document.querySelector('#divChart .chart-stage');
+        const tip=stage.querySelector('.chart-tooltip');
+        const rect=stage.getBoundingClientRect();
+        window.__dfVibes=0;
+        try{Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{window.__dfVibes++;return true;}});}catch(_){}
+        const fire=(type,x)=>{
+          const t=new Touch({identifier:7,target:stage,clientX:x,clientY:rect.top+100,pageX:x,pageY:rect.top+100,screenX:x,screenY:100});
+          stage.dispatchEvent(new TouchEvent(type,{bubbles:true,cancelable:true,touches:type==='touchend'?[]:[t],targetTouches:type==='touchend'?[]:[t],changedTouches:[t]}));
+        };
+        fire('touchstart',rect.left+85);
+        const startText=tip.innerText;
+        const visibleOnStart=tip.classList.contains('visible');
+        fire('touchmove',rect.left+170);
+        fire('touchmove',rect.left+250);
+        const vibes=window.__dfVibes||0;
+        const moveText=tip.innerText;
+        fire('touchend',rect.left+250);
+        const visibleAfterEnd=tip.classList.contains('visible');
+        const lineVisible=stage.querySelector('.hover-line').getAttribute('visibility');
+        return {startText,moveText,visibleOnStart,visibleAfterEnd,vibes,lineVisible};
+      });
+      assert.equal(scrub.visibleOnStart,true);
+      assert.match(scrub.startText,/월 Cashflow/);
+      assert.match(scrub.startText,/월급\s+300만원/);
+      assert.ok(scrub.vibes>=1,`expected haptic ticks while scrubbing, got ${scrub.vibes}`);
+      assert.equal(scrub.visibleAfterEnd,false,'touch tooltip must disappear on finger-up');
+      assert.equal(scrub.lineVisible,'hidden','touch hover line must disappear on finger-up');
+
       // Collapsed FIRE controls must remain fully functional.
       if(!(await page.locator('#fireDetails').getAttribute('open'))) await page.locator('#fireDetails summary').click();
       await page.locator('.mode-switch label').filter({hasText:'배당소득 생활'}).click();

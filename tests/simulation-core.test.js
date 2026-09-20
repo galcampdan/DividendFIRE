@@ -42,3 +42,9 @@ assert.strictEqual(ready.fireMonth,0);
 assert.strictEqual(ready.cashflowContribution,1000000,'cashflow reflects the user current contribution even if FIRE-ready now');
 assert.strictEqual(ready.baseMonthlyRemaining,2000000);
 console.log('cashflow FIRE-ready display test: PASS');
+
+const salaryHover=core.simulate({...base,monthlyIncome:3000000,fireExpenses:1500000,monthlyContribution:1000000,cashflowEnabled:true,reinvest:true},market);
+assert.strictEqual(salaryHover.rows[0].salaryIncome,3000000);
+assert.strictEqual(salaryHover.rows[0].netDividend,2550000);
+assert.strictEqual(salaryHover.rows[0].totalCashIn,5550000,'hover cashflow row must expose salary + after-tax dividend');
+console.log('hover cashflow row test: PASS');

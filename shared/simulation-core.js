@@ -143,8 +143,13 @@ function simulate(p,market){
   }
   function makeRow(m,st,phase,shortfall,sale,saleTax,applied){
     var total=(startMonth-1)+m,cy=startYear+Math.floor(total/12),cm=(total%12)+1,age=currentAge+m/12;
+    var salaryIncome=phase==='FIRE'?0:monthlyIncome;
+    var fireOtherIncome=phase==='FIRE'?st.postFireIncome:0;
+    var monthlyCashIncome=salaryIncome+fireOtherIncome;
+    var totalCashIn=monthlyCashIncome+st.netDividend;
     return {month:m,year:Math.round((m/12)*100)/100,phase:phase,calendarYear:cy,calendarMonth:cm,age:Math.round(age*100)/100,
       assets:rnd(st.assets),securities:rnd(st.securities),cash:rnd(cash),contributed:rnd(contributed),monthlyContribution:rnd(applied||0),
+      salaryIncome:rnd(salaryIncome),fireOtherIncome:rnd(fireOtherIncome),monthlyCashIncome:rnd(monthlyCashIncome),totalCashIn:rnd(totalCashIn),
       grossDividend:rnd(st.grossDividend),netDividend:rnd(st.netDividend),dividendTax:rnd(st.dividendTax),
       grossWithdrawal:rnd(st.grossWithdrawalCapacity),netWithdrawal:rnd(st.netWithdrawalCapacity),withdrawalTax:rnd(st.withdrawalCapacityTax),
       livingCost:rnd(st.livingCost),postFireIncome:rnd(st.postFireIncome),requiredFromPortfolio:rnd(st.requiredFromPortfolio),
