@@ -1,0 +1,129 @@
+name: Build Tauri portable desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "app/static/**"
+      - "shared/**"
+      - "web/**"
+      - "desktop/**"
+      - "tests/**"
+      - "RELEASE_VERSION"
+      - ".github/workflows/build-tauri.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  test-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test shared simulation core
+        run: node tests/simulation-core.test.js
+      - name: Build static frontend
+        run: python web/prepare_pages.py
+      - name: Verify generated shell
+        run: |
+          test -f site/index.html
+          test -f site/simulation-core.js
+          test -f site/manifest.webmanifest
+          grep -q "simulation-core.js" site/index.html
+
+  build-windows:
+    needs: test-core
+    runs-on: windows-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      portable_name: ${{ steps.version.outputs.portable_name }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 2}
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $tag=(Get-Content "RELEASE_VERSION" -Raw).Trim()
+          if($tag -notmatch '^v\d+\.\d+\.\d+$'){throw "RELEASE_VERSION must look like v2.0.0"}
+          $portable="DividendFIRE-Tauri-Portable-$tag.zip";$publish="false"
+          if($env:GITHUB_EVENT_NAME -eq "push" -and $env:GITHUB_REF -eq "refs/heads/main"){
+            $changed=git diff --name-only HEAD^ HEAD
+            if($changed -contains "RELEASE_VERSION"){$publish="true"}
+          }
+          "RELEASE_TAG=$tag" >> $env:GITHUB_ENV;"PORTABLE_NAME=$portable" >> $env:GITHUB_ENV
+          "release_tag=$tag" >> $env:GITHUB_OUTPUT;"portable_name=$portable" >> $env:GITHUB_OUTPUT;"publish=$publish" >> $env:GITHUB_OUTPUT
+      - name: Build static frontend
+        shell: pwsh
+        run: python web/prepare_pages.py
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: {workspaces: "desktop/src-tauri -> target"}
+      - name: Install Tauri CLI
+        shell: pwsh
+        run: cargo install tauri-cli --version "^2.0" --locked
+      - name: Build Tauri portable executable
+        shell: pwsh
+        working-directory: desktop
+        run: cargo tauri build --no-bundle
+      - name: Package portable ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Copy-Item "desktop\src-tauri\target\release\dividend-fire.exe" "release\DividendFIRE.exe"
+          @("Dividend FIRE Simulator - Tauri Portable","","DividendFIRE.exe를 실행하세요.","설치, Python, localhost 서버가 필요하지 않습니다.","Windows 10/11의 Microsoft Edge WebView2를 사용합니다.") | Set-Content "release\PORTABLE_README.txt" -Encoding UTF8
+          Compress-Archive -Path "release\DividendFIRE.exe","release\PORTABLE_README.txt" -DestinationPath "release\$env:PORTABLE_NAME" -CompressionLevel Optimal -Force
+          $hash=(Get-FileHash "release\$env:PORTABLE_NAME" -Algorithm SHA256).Hash
+          "SHA256  $hash  $env:PORTABLE_NAME" | Out-File "release\TAURI_SHA256.txt" -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DividendFIRE-Tauri-Portable
+          path: |
+            release/${{ env.PORTABLE_NAME }}
+            release/TAURI_SHA256.txt
+
+  security-gate:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {name: DividendFIRE-Tauri-Portable, path: release}
+      - name: ClamAV gate
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clamav
+          sudo systemctl stop clamav-freshclam 2>/dev/null || true
+          sudo freshclam || true
+          clamscan --infected "release/${{ needs.build-windows.outputs.portable_name }}"
+          { echo "Dividend FIRE Tauri portable"; echo "ClamAV result: CLEAN"; cat release/TAURI_SHA256.txt; } > release/TAURI_SECURITY.txt
+      - uses: actions/upload-artifact@v4
+        with: {name: DividendFIRE-Tauri-Security, path: release/TAURI_SECURITY.txt}
+
+  publish-release:
+    needs: [build-windows, security-gate]
+    if: needs.build-windows.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {name: DividendFIRE-Tauri-Portable, path: release}
+      - uses: actions/download-artifact@v4
+        with: {name: DividendFIRE-Tauri-Security, path: release}
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build-windows.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          name: Dividend FIRE Simulator ${{ needs.build-windows.outputs.release_tag }}
+          body: |
+            Dividend FIRE 2.x cross-platform architecture.
+            - Tauri WebView desktop app
+            - No Python runtime
+            - No localhost server
+            - Shared JavaScript simulation core with Web/PWA
+            - ClamAV gated release
+          files: |
+            release/${{ needs.build-windows.outputs.portable_name }}
+            release/TAURI_SHA256.txt
+            release/TAURI_SECURITY.txt

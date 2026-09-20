@@ -1,0 +1,6 @@
+const assert=require('assert');const core=require('../shared/simulation-core.js');
+const market={usdkrw:1000,fxSource:'TEST',tickers:{TEST:{ticker:'TEST',currency:'USD',price:100,ttm_dps:6,yield:.06,historical_total_return_cagr:0,history_years:5,default_price_growth:0,default_distribution_growth:0,source:'TEST'}}};
+const base={currentAge:25,startYear:2026,startMonth:1,initialCapital:600000000,monthlyIncome:0,fixedExpenses:0,monthlyContribution:0,fireExpenses:10000000,healthInsurance:0,postFireIncome:0,otherAnnualIncome:0,inflation:0,years:1,dividendStress:0,withdrawalRate:4,fireMode:'dividend',reinvest:false,portfolio:[{ticker:'TEST',weight:100,priceGrowth:0,distributionGrowth:0}]};
+const r=core.simulate(base,market);assert.strictEqual(r.currentNetDividend,2550000);assert.strictEqual(r.currentGrossDividend,3000000);assert.strictEqual(r.currentMonthlyContribution,0);
+const s=core.simulate({...base,monthlyContribution:9000000,contributionSchedule:{2026:0,2027:1000000},years:2},market);assert.strictEqual(s.currentMonthlyContribution,0);assert.strictEqual(s.contributionSchedule['2026'],0);assert.strictEqual(s.contributionSchedule['2027'],1000000);
+console.log('simulation-core tests: PASS');

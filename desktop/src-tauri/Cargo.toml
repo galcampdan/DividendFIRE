@@ -1,0 +1,12 @@
+[package]
+name="dividend-fire"
+version="2.0.0"
+description="Dividend FIRE Simulator desktop shell"
+authors=["Dividend FIRE contributors"]
+edition="2021"
+
+[build-dependencies]
+tauri-build={version="2",features=[]}
+
+[dependencies]
+tauri={version="2",features=[]}
