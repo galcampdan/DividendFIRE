@@ -85,11 +85,13 @@ try{
           const t=new Touch({identifier:7,target:stage,clientX:x,clientY:rect.top+100,pageX:x,pageY:rect.top+100,screenX:x,screenY:100});
           stage.dispatchEvent(new TouchEvent(type,{bubbles:true,cancelable:true,touches:type==='touchend'?[]:[t],targetTouches:type==='touchend'?[]:[t],changedTouches:[t]}));
         };
-        fire('touchstart',rect.left+85);
+        const svg=stage.querySelector('svg').getBoundingClientRect();
+        const plotLeft=svg.left+svg.width*(54/360);
+        fire('touchstart',plotLeft+2);
         const startText=tip.innerText;
         const visibleOnStart=tip.classList.contains('visible');
-        fire('touchmove',rect.left+170);
-        fire('touchmove',rect.left+250);
+        fire('touchmove',plotLeft+70);
+        fire('touchmove',plotLeft+140);
         const vibes=window.__dfVibes||0;
         const moveText=tip.innerText;
         fire('touchend',rect.left+250);
@@ -98,7 +100,7 @@ try{
         return {startText,moveText,visibleOnStart,visibleAfterEnd,vibes,lineVisible};
       });
       assert.equal(scrub.visibleOnStart,true);
-      assert.match(scrub.startText,/월 Cashflow/);
+      assert.match(scrub.startText,/월 cashflow/i);
       assert.match(scrub.startText,/월급\s+300만원/);
       assert.ok(scrub.vibes>=1,`expected haptic ticks while scrubbing, got ${scrub.vibes}`);
       assert.equal(scrub.visibleAfterEnd,false,'touch tooltip must disappear on finger-up');
