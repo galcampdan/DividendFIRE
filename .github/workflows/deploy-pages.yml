@@ -8,6 +8,8 @@ on:
       - "app/static/**"
       - "shared/**"
       - "web/**"
+      - "tests/**"
+      - "package.json"
       - "scripts/build_web_snapshot.py"
       - ".github/workflows/deploy-pages.yml"
   schedule:

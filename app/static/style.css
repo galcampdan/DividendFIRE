@@ -199,6 +199,7 @@ body{min-width:0}button,input,select,summary,a{touch-action:manipulation}
 }
 
 @media(max-width:380px){
+  .hero h1{font-size:20px;white-space:nowrap}
   .shell{padding-left:6px;padding-right:6px}.panel{padding-left:9px;padding-right:9px}
   .form-grid{gap:5px}.form-grid label{padding:8px 7px}
   .cards{gap:5px}.metric{padding:10px 8px}.metric strong{font-size:16px}
