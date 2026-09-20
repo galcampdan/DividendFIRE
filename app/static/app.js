@@ -1,6 +1,6 @@
 
-const UI_VERSION='v2.0.4';
-const MODERN_BUILD='2026-09-20-v2.0.4-salary-growth-1';
+const UI_VERSION='v2.0.5';
+const MODERN_BUILD='2026-09-20-v2.0.5-tooltip-layout-1';
 const LEGACY_APP_VERSION='v8.9.3';
 const LEGACY_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
 async function verifyBuild(){
@@ -16,7 +16,7 @@ async function verifyBuild(){
       if(proof){proof.textContent=`⚠ 빌드 불일치: UI ${UI_VERSION} / runtime ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
       throw new Error('앱 파일 버전이 서로 다릅니다. 새로고침하거나 최신 버전을 사용하세요.');
     }
-    if(proof){proof.textContent=modern?'✓ v2.0.4 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
+    if(proof){proof.textContent=modern?'✓ v2.0.5 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
     return true;
   }catch(e){
     if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ 실행 환경 확인 실패: '+e.message;proof.classList.add('bad');}
@@ -368,7 +368,16 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal',sh
     const dividend=Number(r.netDividend)||0;
     const totalCash=Number(r.totalCashIn)||salary+fireOther+dividend;
     const realTotalCash=currentValueKRW(totalCash,r);
-    const cashflowBody=showCashflow?`<div class="tooltip-cashflow"><span>월 Cashflow</span><b>총 ${compactKRW(totalCash)}/월</b><strong>현재가치 ${compactKRW(realTotalCash)}/월</strong><small>월급 ${compactKRW(salary)} (연 ${salaryGrowth>=0?'+':''}${(salaryGrowth*100).toFixed(1)}%) + 세후배당 ${compactKRW(dividend)}${fireOther>0?` + FIRE 후 기타소득 ${compactKRW(fireOther)}`:''}</small></div>`:'';
+    const cashflowBody=showCashflow?`<div class="tooltip-cashflow">
+      <span class="tooltip-cashflow-label">월 Cashflow</span>
+      <b class="tooltip-cashflow-total">총 ${compactKRW(totalCash)}/월</b>
+      <strong class="tooltip-cashflow-real">현재가치 ${compactKRW(realTotalCash)}/월</strong>
+      <div class="tooltip-cashflow-breakdown">
+        <span><em>월급</em><b>${compactKRW(salary)}</b><small>연 ${salaryGrowth>=0?'+':''}${(salaryGrowth*100).toFixed(1)}%</small></span>
+        <span><em>세후배당</em><b>${compactKRW(dividend)}</b></span>
+        ${fireOther>0?`<span><em>FIRE 후 기타소득</em><b>${compactKRW(fireOther)}</b></span>`:''}
+      </div>
+    </div>`:'';
     const body=cashflowBody+`<div class="tooltip-monthly"><span>${monthlyLabel}</span><b>명목 ${compactKRW(netMonthly)}/월</b><strong>현재가치 ${compactKRW(realNetMonthly)}/월</strong><small>세전 명목 ${compactKRW(grossMonthly)}/월 · 현재가치 ${compactKRW(realGrossMonthly)}/월</small></div>`+
       series.map(s=>nominalRealHTML(s.label,r[s.key],r)).join('')+
       nominalRealHTML('월 적립금',r.monthlyContribution||0,r,'/월')+
@@ -380,7 +389,8 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal',sh
     const fallbackX=plotLeft+(plotRight-plotLeft)*(idx/Math.max(1,rows.length-1));
     const px=(clientX==null?fallbackX:clientX)-stageRect.left;
     const py=(clientY==null?(svgRect.top+(pad.t/H)*svgRect.height+18):clientY)-stageRect.top;
-    const tw=Math.min(270,Math.max(205,stageRect.width-16));
+    const available=Math.max(205,stageRect.width-16);
+    const tw=Math.min(mobile?318:350,available);
     let left=px+14;
     if(left+tw>stageRect.width-8) left=px-tw-14;
     left=Math.max(8,Math.min(stageRect.width-tw-8,left));

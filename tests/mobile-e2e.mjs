@@ -107,6 +107,10 @@ try{
         fire('touchstart',plotLeft);
         const startText=tip.innerText;
         const visibleOnStart=tip.classList.contains('visible');
+        const cash=tip.querySelector('.tooltip-cashflow');
+        const cashStyle=cash?getComputedStyle(cash):null;
+        const cashRect=cash?cash.getBoundingClientRect():null;
+        const cashOverflow=cash?Math.max(0,cash.scrollWidth-cash.clientWidth):999;
         fire('touchmove',plotLeft+70);
         fire('touchmove',plotLeft+140);
         const vibes=window.__dfVibes||0;
@@ -114,11 +118,15 @@ try{
         fire('touchend',rect.left+250);
         const visibleAfterEnd=tip.classList.contains('visible');
         const lineVisible=stage.querySelector('.hover-line').getAttribute('visibility');
-        return {startText,moveText,visibleOnStart,visibleAfterEnd,vibes,lineVisible};
+        return {startText,moveText,visibleOnStart,visibleAfterEnd,vibes,lineVisible,
+          cashDisplay:cashStyle?.display,cashWidth:cashRect?.width||0,cashOverflow};
       });
       assert.equal(scrub.visibleOnStart,true);
       assert.match(scrub.startText,/월 cashflow/i);
       assert.match(scrub.startText,/월급\s+300만원/);
+      assert.equal(scrub.cashDisplay,'block','cashflow card must stay vertically structured, not flex');
+      assert.ok(scrub.cashWidth>=250,`cashflow tooltip too narrow: ${scrub.cashWidth}px`);
+      assert.equal(scrub.cashOverflow,0,'cashflow card must not overflow horizontally');
       assert.ok(scrub.vibes>=1,`expected haptic ticks while scrubbing, got ${scrub.vibes}`);
       assert.equal(scrub.visibleAfterEnd,false,'touch tooltip must disappear on finger-up');
       assert.equal(scrub.lineVisible,'hidden','touch hover line must disappear on finger-up');

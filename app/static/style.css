@@ -219,3 +219,92 @@ body{min-width:0}button,input,select,summary,a{touch-action:manipulation}
   .chart-readout:not(.active){min-height:28px;display:flex;align-items:center;color:#777}
   .tooltip-cashflow{padding:8px 9px}.tooltip-cashflow b{font-size:14px}
 }
+
+/* v2.0.5: keep cashflow hover card vertically structured.
+   Older generic .chart-tooltip>div flex rules were flattening this card. */
+.chart-tooltip>.tooltip-cashflow{
+  display:block!important;
+  width:100%;
+  box-sizing:border-box;
+  margin:7px 0 9px;
+  padding:10px 11px;
+  border-radius:10px;
+  background:#111;
+  color:#fff;
+}
+.chart-tooltip>.tooltip-cashflow .tooltip-cashflow-label{
+  display:block;
+  color:#aeb3b9!important;
+  font-size:9.5px;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  margin:0 0 3px;
+}
+.chart-tooltip>.tooltip-cashflow .tooltip-cashflow-total{
+  display:block;
+  color:#fff;
+  font-size:16px!important;
+  line-height:1.2;
+  white-space:nowrap;
+}
+.chart-tooltip>.tooltip-cashflow .tooltip-cashflow-real{
+  display:block;
+  margin:3px 0 8px;
+  color:#9fe3b1!important;
+  font-size:12px!important;
+}
+.chart-tooltip>.tooltip-cashflow .tooltip-cashflow-breakdown{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+  padding-top:8px;
+  border-top:1px solid rgba(255,255,255,.12);
+}
+.chart-tooltip>.tooltip-cashflow .tooltip-cashflow-breakdown>span{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:1px 7px;
+  min-width:0;
+  color:#fff;
+}
+.chart-tooltip>.tooltip-cashflow .tooltip-cashflow-breakdown em{
+  font-style:normal;
+  color:#aeb3b9;
+  font-size:9px;
+  white-space:nowrap;
+}
+.chart-tooltip>.tooltip-cashflow .tooltip-cashflow-breakdown b{
+  color:#fff;
+  font-size:10.5px!important;
+  white-space:nowrap;
+  text-align:right;
+}
+.chart-tooltip>.tooltip-cashflow .tooltip-cashflow-breakdown small{
+  grid-column:1/-1;
+  display:block;
+  margin:0!important;
+  color:#81868c!important;
+  font-size:8.5px;
+  text-align:right;
+}
+.chart-readout.active{
+  display:grid;
+  grid-template-columns:auto auto minmax(0,1fr);
+  column-gap:8px;
+  row-gap:5px;
+  align-items:center;
+}
+.chart-readout.active .readout-cashflow,
+.chart-readout.active .readout-monthly{
+  grid-column:1/-1;
+  white-space:normal;
+  line-height:1.35;
+}
+.chart-readout.active>b:not(.readout-cashflow):not(.readout-monthly){
+  white-space:normal;
+}
+@media(max-width:700px){
+  .chart-tooltip>.tooltip-cashflow{padding:9px 10px}
+  .chart-tooltip>.tooltip-cashflow .tooltip-cashflow-total{font-size:15px!important}
+  .chart-tooltip>.tooltip-cashflow .tooltip-cashflow-breakdown{grid-template-columns:1fr 1fr}
+}
