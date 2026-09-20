@@ -108,7 +108,7 @@ try{
         const startText=tip.innerText;
         const visibleOnStart=tip.classList.contains('visible');
         const cash=tip.querySelector('.tooltip-cashflow');
-        const cashStyle=cash?getComputedStyle(cash):null;
+        const cashDisplay=cash?getComputedStyle(cash).display:'';
         const cashRect=cash?cash.getBoundingClientRect():null;
         const cashOverflow=cash?Math.max(0,cash.scrollWidth-cash.clientWidth):999;
         fire('touchmove',plotLeft+70);
@@ -119,7 +119,7 @@ try{
         const visibleAfterEnd=tip.classList.contains('visible');
         const lineVisible=stage.querySelector('.hover-line').getAttribute('visibility');
         return {startText,moveText,visibleOnStart,visibleAfterEnd,vibes,lineVisible,
-          cashDisplay:cashStyle?.display,cashWidth:cashRect?.width||0,cashOverflow};
+          cashDisplay,cashWidth:cashRect?.width||0,cashOverflow};
       });
       assert.equal(scrub.visibleOnStart,true);
       assert.match(scrub.startText,/월 cashflow/i);
