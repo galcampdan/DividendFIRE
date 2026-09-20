@@ -13,6 +13,14 @@ const market={
 };
 const waitDone=page=>page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('완료'));
 
+// Update-policy regression guard: PWA updates must never force-refresh an open session.
+const pwaSource=await fs.readFile('web/pwa.js','utf8');
+const swSource=await fs.readFile('web/service-worker.js','utf8');
+assert.doesNotMatch(pwaSource,/location\.reload\s*\(/,'PWA update code must not force location.reload()');
+assert.doesNotMatch(swSource,/skipWaiting\s*\(/,'service worker updates must wait for the current session to close');
+assert.doesNotMatch(swSource,/\.navigate\s*\(/,'service worker must not navigate open clients during update');
+
+
 await fs.mkdir('test-results',{recursive:true});
 const browser=await chromium.launch({headless:true});
 try{

@@ -1,9 +1,11 @@
-const CACHE='dividend-fire-pwa-v2026-09-20-8';
-const REFRESH_TOKEN='20260920-8';
+const CACHE='dividend-fire-pwa-v2026-09-20-9';
 const SHELL=['./','./index.html','./style.css','./simulation-core.js','./web-api.js','./app.js','./manifest.webmanifest','./app-icon.svg','./data/market.json'];
 
 self.addEventListener('install',event=>{
-  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));
+  // Cache the next version in the background, but deliberately DO NOT call
+  // skipWaiting(). If an older worker is controlling an open app, this worker
+  // waits until that session is closed instead of forcing a mid-session reload.
+  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)));
 });
 
 self.addEventListener('activate',event=>{
@@ -11,20 +13,6 @@ self.addEventListener('activate',event=>{
     const keys=await caches.keys();
     await Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)));
     await self.clients.claim();
-
-    // Older releases used cache-first HTML/JS. Existing installed PWAs can therefore
-    // stay pinned to a broken bundle even after deployment. On activation of this
-    // worker, force each open same-origin window through the fresh network-first path.
-    const clients=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-    await Promise.all(clients.map(async client=>{
-      try{
-        const url=new URL(client.url);
-        if(url.origin!==self.location.origin)return;
-        if(url.searchParams.get('__df_refresh')===REFRESH_TOKEN)return;
-        url.searchParams.set('__df_refresh',REFRESH_TOKEN);
-        await client.navigate(url.toString());
-      }catch(_){}
-    }));
   })());
 });
 
