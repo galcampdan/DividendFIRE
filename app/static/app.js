@@ -31,15 +31,16 @@ let contributionSchedule = {}; // {calendarYear: monthlyContributionManwon}; res
 
 
 function settingsSnapshot(){
-  const ids=['age','initial','income','fixed','contrib','fireexp','health','postFireIncome','otherincome','inflation','years','withdrawalRate','stress'];
+  const ids=['age','initial','income','contrib','fireexp','health','postFireIncome','otherincome','inflation','years','withdrawalRate','stress'];
   const fields={}; ids.forEach(id=>{ const el=$('#'+id); if(el) fields[id]=el.value; });
-  return {fields,fireMode:fireMode(),reinvest:$('#reinvest')?.checked!==false,portfolio:portfolio.map(x=>({...x})),contributionSchedule:{...contributionSchedule}};
+  return {fields,fireMode:fireMode(),reinvest:$('#reinvest')?.checked!==false,cashflowEnabled:$('#cashflowEnabled')?.checked===true,portfolio:portfolio.map(x=>({...x})),contributionSchedule:{...contributionSchedule}};
 }
 function applySettings(v){
   if(!v || typeof v!=='object') return false;
   if(v.fields) Object.entries(v.fields).forEach(([id,val])=>{const el=$('#'+id);if(el&&val!==undefined&&val!==null)el.value=val;});
   if(v.fireMode){const r=document.querySelector(`input[name="fireMode"][value="${v.fireMode}"]`);if(r)r.checked=true;}
   if(typeof v.reinvest==='boolean'&&$('#reinvest')) $('#reinvest').checked=v.reinvest;
+  if(typeof v.cashflowEnabled==='boolean'&&$('#cashflowEnabled')) $('#cashflowEnabled').checked=v.cashflowEnabled;
   if(Array.isArray(v.portfolio)&&v.portfolio.length){
     portfolio=v.portfolio.map(x=>({ticker:sanitizeTicker(x.ticker),weight:+x.weight||0,priceGrowth:+x.priceGrowth||0,distributionGrowth:+x.distributionGrowth||0})).filter(x=>x.ticker);
     rebalanceAfterDelete();
@@ -182,7 +183,7 @@ function payload(){
   const now=new Date();
   return{
     currentAge:clamp($('#age').value,0,100),startYear:now.getFullYear(),startMonth:now.getMonth()+1,
-    initialCapital:manwonInput($('#initial').value),monthlyIncome:manwonInput($('#income').value),fixedExpenses:manwonInput($('#fixed').value),monthlyContribution:manwonInput($('#contrib').value),contributionSchedule:annualContributionPayload(),
+    initialCapital:manwonInput($('#initial').value),monthlyIncome:manwonInput($('#income').value),fixedExpenses:0,monthlyContribution:manwonInput($('#contrib').value),contributionSchedule:annualContributionPayload(),cashflowEnabled:$('#cashflowEnabled')?.checked===true,
     fireExpenses:manwonInput($('#fireexp').value),healthInsurance:manwonInput($('#health').value),postFireIncome:manwonInput($('#postFireIncome').value),otherAnnualIncome:manwonInput($('#otherincome').value),
     inflation:+$('#inflation').value,years:+$('#years').value,dividendStress:+$('#stress').value,withdrawalRate:+$('#withdrawalRate').value,fireMode:fireMode(),reinvest:$('#reinvest').checked,
     portfolio:portfolio.map(x=>({ticker:x.ticker,weight:x.weight,priceGrowth:x.priceGrowth,distributionGrowth:x.distributionGrowth}))
@@ -196,15 +197,36 @@ function updateModeUI(){
   $('#cashChartTitle').textContent=withdrawal?'인출 여력 vs 필요 생활비':'배당 구매력 vs 필요 생활비';
   $('#cashChartDesc').textContent=withdrawal?'FIRE 이후에는 배당을 먼저 쓰고 부족한 생활비만 자산을 매도합니다.':'FIRE 이후에는 적립을 멈추고 배당으로 생활하며, 초과분만 재투자합니다.';
   $('#modeHelp').textContent=withdrawal?`연 ${(+$('#withdrawalRate').value||0).toFixed(1)}% 인출 한도로 FIRE 여부를 판단합니다.`:'초기 분배율뿐 아니라 분배금 성장률이 물가를 따라가는지도 함께 봅니다.';
+  updateCashflowVisibility();
 }
-$$('input[name="fireMode"]').forEach(el=>el.addEventListener('change',updateModeUI));$('#withdrawalRate').addEventListener('input',updateModeUI);
+function cashflowEnabled(){return $('#cashflowEnabled')?.checked===true;}
+function updateCashflowVisibility(){
+  const on=cashflowEnabled(),panel=$('#cashflowPanel');
+  if(panel)panel.classList.toggle('cashflow-hidden',!on);
+  if(on)$('#currentCashLabel').textContent='현재 월 총 현금유입';
+  else $('#currentCashLabel').textContent=fireMode()==='withdrawal'?'현재 세후 월 인출가능액':'현재 세후 월배당';
+}
+function renderCashflow(j){
+  updateCashflowVisibility();
+  if(!cashflowEnabled())return;
+  const pairs=[
+    ['#cfIncome',j.cashflowIncome],['#cfDividend',j.cashflowDividend],['#cfTotal',j.cashflowTotalInflow],
+    ['#cfLiving',j.cashflowLivingCost],['#cfContribution',j.cashflowContribution],['#cfReinvest',j.cashflowDividendReinvest],['#cfRemaining',j.cashflowRemaining]
+  ];
+  pairs.forEach(([id,v])=>{const el=$(id);if(el)el.textContent=manwon(v)+'/월';});
+  const formula=$('#cashflowFormula');
+  if(formula)formula.textContent=`${manwon(j.cashflowIncome)} + ${manwon(j.cashflowDividend)} = ${manwon(j.cashflowTotalInflow)}/월`;
+  const rem=$('#cfRemaining');if(rem)rem.classList.toggle('negative',Number(j.cashflowRemaining)<0);
+}
+$('input[name="fireMode"]').forEach(el=>el.addEventListener('change',updateModeUI));$('#withdrawalRate').addEventListener('input',updateModeUI);
+$('#cashflowEnabled').addEventListener('change',()=>{updateCashflowVisibility();scheduleSave();runSimulation();});
 function updateCashflowHint(){
-  const income=+$('#income').value||0,fixed=+$('#fixed').value||0,year=simulationStartYear();
-  const contrib=currentContributionManwonForYear(year),max=income-fixed,el=$('#cashflowHint');
-  if(contrib>max){el.textContent=`⚠ ${year}년 월 적립금이 소득-고정비보다 ${manwon(manwonInput(contrib-max))} 많습니다.`;el.className='hint bad';}
-  else{el.textContent=`${year}년 기준 투자 후 월 잉여현금 ${manwon(manwonInput(max-contrib))}`;el.className='hint';}
+  const income=+$('#income').value||0,living=+$('#fireexp').value||0,year=simulationStartYear();
+  const contrib=currentContributionManwonForYear(year),base=income-living-contrib,el=$('#cashflowHint');
+  if(base<0){el.textContent=`⚠ ${year}년 기준 소득에서 생활비·납입을 빼면 ${manwon(manwonInput(-base))} 부족합니다. Cashflow를 켜면 배당까지 포함한 상세 흐름을 볼 수 있습니다.`;el.className='hint bad';}
+  else{el.textContent=`${year}년 기준 소득 - 생활비 - 납입 = ${manwon(manwonInput(base))}/월 · Cashflow를 켜면 세후 배당도 합산합니다.`;el.className='hint';}
 }
-['income','fixed'].forEach(id=>$('#'+id).addEventListener('input',updateCashflowHint));
+['income','fireexp'].forEach(id=>$('#'+id).addEventListener('input',updateCashflowHint));
 $('#contrib').addEventListener('input',()=>{renderContributionSchedule();updateCashflowHint();});
 $('#years').addEventListener('change',()=>{renderContributionSchedule();scheduleSave();});
 $('#years').addEventListener('input',()=>{renderContributionSchedule();});
@@ -366,10 +388,17 @@ async function runSimulation(){
     if(j.fireMonth!=null&&j.postFireFailureMonth!=null){$('#fireSub').textContent=`${fm.sub} · ⚠ ${failm.year}년 ${failm.month}월 (${ageText(failm.age)})부터 유지 실패`;$('#fireCard').closest('.metric').classList.add('warn');}
     else{$('#fireCard').closest('.metric').classList.remove('warn');$('#fireSub').textContent=j.fireMonth==null?'현재 가정에서 목표기간 내 현금흐름 부족':`${fm.sub} · ${withdrawal?'FIRE 후 적립 중단 · 배당+필요분 매도':'FIRE 후 적립 중단 · 원금 매도 없이 배당생활 유지'}`;}
     $('#assetCard').textContent=manwon(j.finalAssets);$('#assetSub').textContent=j.fireAssets!=null?`FIRE 시점 ${manwon(j.fireAssets)} · 그때까지 납입 ${manwon(j.fireContributed||0)}`:`목표기간 동안 계속 적립`;
-    $('#currentDivCard').textContent=manwon(j.currentNetCashflow)+'/월';$('#finalDivCard').textContent=manwon(j.finalNetCashflow)+'/월';
+    if(cashflowEnabled()){
+      $('#currentDivCard').textContent=manwon(j.cashflowTotalInflow)+'/월';
+      $('#yieldCard').textContent=`월 소득 ${manwon(j.cashflowIncome)} + 세후 배당 ${manwon(j.cashflowDividend)}`;
+    }else{
+      $('#currentDivCard').textContent=manwon(j.currentNetCashflow)+'/월';
+      $('#yieldCard').textContent=withdrawal?`인출 ${(j.withdrawalRate*100).toFixed(1)}% · 가격성장 가정 ${pct01(j.weightedPriceGrowth)}`:`현재 분배율 ${pct01(j.weightedYield)} · 분배금 성장 ${pct01(j.weightedDistributionGrowth)} · 물가 ${(+$('#inflation').value||0).toFixed(1)}%`;
+    }
+    $('#finalDivCard').textContent=manwon(j.finalNetCashflow)+'/월';
     $('#finalLivingSub').textContent=withdrawal?`최종 포트폴리오 필요액 ${manwon(j.finalRequiredFromPortfolio)}/월`:`실질 월배당 ${manwon(j.finalRealNetDividend)} · 현재가치 필요액 ${manwon(j.finalRealRequired)}`;
-    $('#yieldCard').textContent=withdrawal?`인출 ${(j.withdrawalRate*100).toFixed(1)}% · 가격성장 가정 ${pct01(j.weightedPriceGrowth)}`:`현재 분배율 ${pct01(j.weightedYield)} · 분배금 성장 ${pct01(j.weightedDistributionGrowth)} · 물가 ${(+$('#inflation').value||0).toFixed(1)}%`;
-    $('#surplusCard').textContent=manwon(j.monthlySurplus);$('#surplusCard').closest('.metric').classList.toggle('negative',j.monthlySurplus<0);
+    $('#surplusCard').textContent=manwon(j.cashflowRemaining);$('#surplusCard').closest('.metric').classList.toggle('negative',j.cashflowRemaining<0);
+    renderCashflow(j);
     $('#taxCard').textContent=manwon(j.cumulativeTax);$('#taxSub').textContent=`배당세 ${manwon(j.cumulativeDividendTax)} · 매도세 ${manwon(j.cumulativeSaleTax)}`;
     $('#fxBadge').textContent=`USD/KRW ${Math.round(j.usdkrw).toLocaleString('ko-KR')} · ${j.fxSource.includes('DEMO')?'DEMO':'LIVE'}`;
     drawChart($('#assetChart'),j.rows,[{key:'assets',label:'총자산'},{key:'contributed',label:'누적 납입'}],j.fireMonth,j.fireMode);

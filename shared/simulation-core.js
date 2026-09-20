@@ -44,8 +44,8 @@ function simulate(p,market){
   var startMonth=clamp(parseInt(p.startMonth==null?(now.getMonth()+1):p.startMonth,10),1,12);
   var initial=Math.max(0,num(p.initialCapital));
   var monthlyIncome=Math.max(0,num(p.monthlyIncome));
-  var fixed=Math.max(0,num(p.fixedExpenses));
   var monthlyContrib=Math.max(0,num(p.monthlyContribution));
+  var cashflowEnabled=p.cashflowEnabled===true;
   var schedule={};
   if(p.contributionSchedule&&typeof p.contributionSchedule==='object'){
     Object.keys(p.contributionSchedule).forEach(function(y){
@@ -53,7 +53,7 @@ function simulate(p,market){
       if(Number.isFinite(yi)&&yi>=1900&&yi<=2300)schedule[yi]=av;
     });
   }
-  var fireExp=Math.max(0,num(p.fireExpenses,fixed));
+  var fireExp=Math.max(0,num(p.fireExpenses));
   var health=Math.max(0,num(p.healthInsurance));
   var postFireIncome=Math.max(0,num(p.postFireIncome));
   var inflation=clamp(num(p.inflation,2.5)/100,-.02,.15);
@@ -201,7 +201,14 @@ function simulate(p,market){
   var weightedPriceGrowth=stats.reduce(function(s,x){return s+num(x.price_growth)*num(x.weight);},0);
   var ysum=stats.reduce(function(s,x){return s+num(x.yield)*num(x.weight);},0);
   var weightedDistributionGrowth=ysum>0?stats.reduce(function(s,x){return s+num(x.distribution_growth)*num(x.yield)*num(x.weight);},0)/ysum:0;
-  var currentMonthlyContribution=scheduledContribution(0);
+  var currentMonthlyContribution=fireMonth===0?0:scheduledContribution(0);
+  var cashflowIncome=monthlyIncome;
+  var cashflowDividend=st0.netDividend;
+  var cashflowTotalInflow=cashflowIncome+cashflowDividend;
+  var cashflowLivingCost=fireExp;
+  var cashflowContribution=currentMonthlyContribution;
+  var cashflowDividendReinvest=reinvest?cashflowDividend:0;
+  var cashflowRemaining=cashflowTotalInflow-cashflowLivingCost-cashflowContribution-cashflowDividendReinvest;
   var realFactor=Math.pow(1+inflation,years);
   var sortedSchedule={};
   Object.keys(schedule).sort(function(a,b){return Number(a)-Number(b);}).forEach(function(y){sortedSchedule[y]=rnd(schedule[y]);});
@@ -211,7 +218,10 @@ function simulate(p,market){
     fireMonth:fireMonth,fireAssets:fireAssets==null?null:rnd(fireAssets),fireContributed:fireContributed==null?null:rnd(fireContributed),
     postFireFailureMonth:postFireFailureMonth,depletedMonth:depletedMonth,finalAssets:rnd(final.assets),finalCash:rnd(cash),
     weightedYield:weightedYield,weightedPriceGrowth:weightedPriceGrowth,weightedDistributionGrowth:weightedDistributionGrowth,
-    monthlySurplus:rnd(monthlyIncome-fixed-currentMonthlyContribution),currentMonthlyContribution:rnd(currentMonthlyContribution),
+    cashflowEnabled:cashflowEnabled,monthlySurplus:rnd(cashflowRemaining),currentMonthlyContribution:rnd(currentMonthlyContribution),
+    cashflowIncome:rnd(cashflowIncome),cashflowDividend:rnd(cashflowDividend),cashflowTotalInflow:rnd(cashflowTotalInflow),
+    cashflowLivingCost:rnd(cashflowLivingCost),cashflowContribution:rnd(cashflowContribution),
+    cashflowDividendReinvest:rnd(cashflowDividendReinvest),cashflowRemaining:rnd(cashflowRemaining),
     contributionSchedule:sortedSchedule,currentNetDividend:rnd(st0.netDividend),currentGrossDividend:rnd(st0.grossDividend),
     currentNetWithdrawal:rnd(st0.netWithdrawalCapacity),currentGrossWithdrawal:rnd(st0.grossWithdrawalCapacity),
     finalNetDividend:rnd(final.netDividend),finalGrossDividend:rnd(final.grossDividend),finalNetWithdrawal:rnd(final.netWithdrawalCapacity),

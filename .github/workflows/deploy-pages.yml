@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "app/static/**"
+      - "shared/**"
       - "web/**"
       - "scripts/build_web_snapshot.py"
       - ".github/workflows/deploy-pages.yml"

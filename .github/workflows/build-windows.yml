@@ -2,25 +2,6 @@ name: Build Windows installer
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
-    paths-ignore:
-      - "web/**"
-      - "shared/**"
-      - "desktop/**"
-      - "tests/**"
-      - "scripts/build_web_snapshot.py"
-      - ".github/workflows/deploy-pages.yml"
-      - ".github/workflows/build-tauri.yml"
-      - "RELEASE_VERSION"
-      - "README.md"
-      - "ARCHITECTURE.md"
-      - "CONTRIBUTING.md"
-      - "SECURITY.md"
-      - "OPEN_SOURCE.md"
 
 permissions:
   contents: write
