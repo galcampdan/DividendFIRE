@@ -75,10 +75,12 @@ try{
 
       // Collapsed FIRE controls must remain fully functional.
       if(!(await page.locator('#fireDetails').getAttribute('open'))) await page.locator('#fireDetails summary').click();
-      await page.locator('input[name="fireMode"][value="dividend"]').check();
+      await page.locator('.mode-switch label').filter({hasText:'배당소득 생활'}).click();
+      assert.equal(await page.locator('input[name="fireMode"][value="dividend"]').isChecked(),true);
       assert.equal(await page.locator('#withdrawalRateField').isVisible(),false);
       assert.equal(await page.locator('#dividendStressField').isVisible(),true);
-      await page.locator('input[name="fireMode"][value="withdrawal"]').check();
+      await page.locator('.mode-switch label').filter({hasText:'n% 인출'}).click();
+      assert.equal(await page.locator('input[name="fireMode"][value="withdrawal"]').isChecked(),true);
       assert.equal(await page.locator('#withdrawalRateField').isVisible(),true);
 
       await page.locator('#reinvest').uncheck();
