@@ -38,7 +38,7 @@ jobs:
       - name: Install mobile QA browser
         run: |
           npm install --ignore-scripts
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
       - name: Start local static site
         run: |
           python -m http.server 4173 --directory site > /tmp/dividendfire-http.log 2>&1 &

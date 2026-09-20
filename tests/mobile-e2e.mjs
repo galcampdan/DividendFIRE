@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium, webkit } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 
@@ -128,6 +128,18 @@ try{
     await context.close();
   }
 
+  // Built-site smoke test without mocked market.json: validates the actual generated snapshot path.
+  const realContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
+  const realPage=await realContext.newPage();
+  const realErrors=[];
+  realPage.on('pageerror',err=>realErrors.push(String(err)));
+  await realPage.goto(baseURL,{waitUntil:'networkidle'});
+  await waitDone(realPage);
+  assert.equal(realErrors.length,0,`real snapshot page errors: ${realErrors.join('; ')}`);
+  assert.equal(await realPage.locator('#assetChart svg').count(),1,'real snapshot asset chart must render');
+  assert.equal(await realPage.locator('#divChart svg').count(),1,'real snapshot cashflow chart must render');
+  await realContext.close();
+
   // PWA installation/update/offline shell check on a real Service Worker context.
   const pwaContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'allow'});
   const pwaPage=await pwaContext.newPage();
@@ -144,7 +156,33 @@ try{
   assert.equal(await pwaPage.locator('#inputsPanel').isVisible(),true,'PWA shell should load offline');
   await pwaContext.close();
 
-  console.log('mobile e2e + cashflow + persistence + PWA offline: PASS');
+  console.log('chromium mobile e2e + cashflow + persistence + real snapshot + PWA offline: PASS');
 } finally {
   await browser.close();
+}
+
+// Safari/iOS engine smoke test. This catches WebKit-only parser/layout/event regressions.
+const safari=await webkit.launch({headless:true});
+try{
+  const context=await safari.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,serviceWorkers:'block'});
+  const page=await context.newPage();
+  const errors=[];
+  page.on('pageerror',err=>errors.push(String(err)));
+  await page.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
+  await page.goto(baseURL,{waitUntil:'networkidle'});
+  await waitDone(page);
+  assert.equal(errors.length,0,`WebKit page errors: ${errors.join('; ')}`);
+  assert.equal(await page.locator('.mobile-action-bar').isVisible(),true);
+  assert.equal(await page.locator('#assetChart svg').count(),1);
+  await page.locator('#income').fill('321');
+  await page.locator('#mobileRun').click();
+  await waitDone(page);
+  assert.equal(await page.locator('#income').inputValue(),'321');
+  const overflow=await page.evaluate(()=>Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-window.innerWidth);
+  assert.ok(overflow<=1,`WebKit horizontal overflow ${overflow}px`);
+  await page.screenshot({path:'test-results/mobile-webkit-390.png',fullPage:true});
+  await context.close();
+  console.log('webkit mobile smoke: PASS');
+} finally {
+  await safari.close();
 }
