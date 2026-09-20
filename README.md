@@ -4,7 +4,7 @@ ETF 포트폴리오 기반 FIRE 시뮬레이터입니다.
 
 ## Windows 무설치판 v2 (추천)
 
-**[⬇️ DividendFIRE-Tauri-Portable-v2.0.0.zip 다운로드](https://github.com/galcampdan/DividendFIRE/releases/download/v2.0.0/DividendFIRE-Tauri-Portable-v2.0.0.zip)**
+**[⬇️ DividendFIRE-Tauri-Portable-v2.0.1.zip 다운로드](https://github.com/galcampdan/DividendFIRE/releases/download/v2.0.1/DividendFIRE-Tauri-Portable-v2.0.1.zip)**
 
 1. ZIP 압축을 풉니다.
 2. `DividendFIRE.exe`를 실행합니다.
@@ -35,13 +35,13 @@ Web/PWA와 Windows v2가 같은 FIRE 계산 코어를 사용하도록 구조를 
 
 ## 보안 확인
 
-v2.0.0 Portable ZIP SHA-256:
+v2.0.1 Portable ZIP SHA-256:
 
 ```text
-FC68AD4B99A3B306E79194C9919B03B6DBC55EE210202A8677E8081047E3E074
+D9391AEA8AEFD49EDB35A21BEBB74F119CBE5CBE0664BC4B1976EE46CF9CEE61
 ```
 
-v2.0.0 Release에는 `TAURI_SHA256.txt`, `TAURI_SECURITY.txt`가 함께 제공되며 GitHub Actions의 ClamAV gate를 통과했습니다.
+v2.0.1 Release에는 `TAURI_SHA256.txt`, `TAURI_SECURITY.txt`가 함께 제공되며 GitHub Actions의 ClamAV gate를 통과했습니다.
 
 **[전체 최신 Release 보기](https://github.com/galcampdan/DividendFIRE/releases/latest)**
 
