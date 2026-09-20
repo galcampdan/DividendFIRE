@@ -51,6 +51,7 @@ try{
       assert.match(await page.locator('#cfReinvest').innerText(),/255/);
       assert.match(await page.locator('#cfRemaining').innerText(),/50/);
 
+      await page.locator('#fireDetails summary').click();
       await page.locator('#reinvest').uncheck();
       await page.locator('#mobileRun').click();
       await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('완료'));
