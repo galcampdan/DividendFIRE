@@ -261,7 +261,7 @@ function renderCashflow(j){
   if(formula)formula.textContent=`${manwon(j.cashflowIncome)} + ${manwon(j.cashflowDividend)} = ${manwon(j.cashflowTotalInflow)}/월`;
   const rem=$('#cfRemaining');if(rem)rem.classList.toggle('negative',Number(j.cashflowRemaining)<0);
 }
-$('input[name="fireMode"]').forEach(el=>el.addEventListener('change',updateModeUI));$('#withdrawalRate').addEventListener('input',updateModeUI);
+$$('input[name="fireMode"]').forEach(el=>el.addEventListener('change',updateModeUI));$('#withdrawalRate').addEventListener('input',updateModeUI);
 $('#cashflowEnabled').addEventListener('change',()=>{updateCashflowVisibility();scheduleSave();runSimulation();});
 function updateCashflowHint(){
   const income=+$('#income').value||0,living=+$('#fireexp').value||0,year=simulationStartYear();
