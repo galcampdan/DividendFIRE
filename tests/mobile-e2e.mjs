@@ -87,7 +87,7 @@ try{
         };
         const svg=stage.querySelector('svg').getBoundingClientRect();
         const plotLeft=svg.left+svg.width*(54/360);
-        fire('touchstart',plotLeft+2);
+        fire('touchstart',plotLeft);
         const startText=tip.innerText;
         const visibleOnStart=tip.classList.contains('visible');
         fire('touchmove',plotLeft+70);
