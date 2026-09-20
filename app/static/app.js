@@ -1,6 +1,6 @@
 
-const UI_VERSION='v2.0.3';
-const MODERN_BUILD='2026-09-20-v2.0.3-cashflow-haptics-1';
+const UI_VERSION='v2.0.4';
+const MODERN_BUILD='2026-09-20-v2.0.4-salary-growth-1';
 const LEGACY_APP_VERSION='v8.9.3';
 const LEGACY_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
 async function verifyBuild(){
@@ -16,7 +16,7 @@ async function verifyBuild(){
       if(proof){proof.textContent=`⚠ 빌드 불일치: UI ${UI_VERSION} / runtime ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
       throw new Error('앱 파일 버전이 서로 다릅니다. 새로고침하거나 최신 버전을 사용하세요.');
     }
-    if(proof){proof.textContent=modern?'✓ v2.0.3 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
+    if(proof){proof.textContent=modern?'✓ v2.0.4 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
     return true;
   }catch(e){
     if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ 실행 환경 확인 실패: '+e.message;proof.classList.add('bad');}
@@ -66,7 +66,7 @@ mobileQuery.addEventListener?.('change',()=>{showAllContributionYears=false;sync
 
 
 function settingsSnapshot(){
-  const ids=['age','initial','income','contrib','fireexp','health','postFireIncome','otherincome','inflation','years','withdrawalRate','stress'];
+  const ids=['age','initial','income','salaryGrowth','contrib','fireexp','health','postFireIncome','otherincome','inflation','years','withdrawalRate','stress'];
   const fields={}; ids.forEach(id=>{ const el=$('#'+id); if(el) fields[id]=el.value; });
   return {fields,fireMode:fireMode(),reinvest:$('#reinvest')?.checked!==false,cashflowEnabled:$('#cashflowEnabled')?.checked===true,portfolio:portfolio.map(x=>({...x})),contributionSchedule:{...contributionSchedule}};
 }
@@ -226,7 +226,7 @@ function payload(){
   const now=new Date();
   return{
     currentAge:clamp($('#age').value,0,100),startYear:now.getFullYear(),startMonth:now.getMonth()+1,
-    initialCapital:manwonInput($('#initial').value),monthlyIncome:manwonInput($('#income').value),fixedExpenses:0,monthlyContribution:manwonInput($('#contrib').value),contributionSchedule:annualContributionPayload(),cashflowEnabled:$('#cashflowEnabled')?.checked===true,
+    initialCapital:manwonInput($('#initial').value),monthlyIncome:manwonInput($('#income').value),salaryGrowth:+$('#salaryGrowth').value,fixedExpenses:0,monthlyContribution:manwonInput($('#contrib').value),contributionSchedule:annualContributionPayload(),cashflowEnabled:$('#cashflowEnabled')?.checked===true,
     fireExpenses:manwonInput($('#fireexp').value),healthInsurance:manwonInput($('#health').value),postFireIncome:manwonInput($('#postFireIncome').value),otherAnnualIncome:manwonInput($('#otherincome').value),
     inflation:+$('#inflation').value,years:+$('#years').value,dividendStress:+$('#stress').value,withdrawalRate:+$('#withdrawalRate').value,fireMode:fireMode(),reinvest:$('#reinvest').checked,
     portfolio:portfolio.map(x=>({ticker:x.ticker,weight:x.weight,priceGrowth:x.priceGrowth,distributionGrowth:x.distributionGrowth}))
@@ -264,12 +264,12 @@ function renderCashflow(j){
 $$('input[name="fireMode"]').forEach(el=>el.addEventListener('change',updateModeUI));$('#withdrawalRate').addEventListener('input',updateModeUI);
 $('#cashflowEnabled').addEventListener('change',()=>{updateCashflowVisibility();scheduleSave();runSimulation();});
 function updateCashflowHint(){
-  const income=+$('#income').value||0,living=+$('#fireexp').value||0,year=simulationStartYear();
+  const income=+$('#income').value||0,growth=+$('#salaryGrowth').value||0,living=+$('#fireexp').value||0,year=simulationStartYear();
   const contrib=currentContributionManwonForYear(year),base=income-living-contrib,el=$('#cashflowHint');
   if(base<0){el.textContent=`⚠ ${year}년 기준 소득에서 생활비·납입을 빼면 ${manwon(manwonInput(-base))} 부족합니다. Cashflow를 켜면 배당까지 포함한 상세 흐름을 볼 수 있습니다.`;el.className='hint bad';}
-  else{el.textContent=`${year}년 기준 소득 - 생활비 - 납입 = ${manwon(manwonInput(base))}/월 · Cashflow를 켜면 세후 배당도 합산합니다.`;el.className='hint';}
+  else{el.textContent=`${year}년 초봉 기준 월급 - 생활비 - 납입 = ${manwon(manwonInput(base))}/월 · 연봉은 매 12개월마다 ${growth>=0?'+':''}${growth.toFixed(1)}% 복리 반영됩니다.`;el.className='hint';}
 }
-['income','fireexp'].forEach(id=>$('#'+id).addEventListener('input',()=>{updateCashflowHint();updateFoldSummaries();}));
+['income','salaryGrowth','fireexp'].forEach(id=>$('#'+id).addEventListener('input',()=>{updateCashflowHint();updateFoldSummaries();}));
 $('#contrib').addEventListener('input',()=>{renderContributionSchedule();updateCashflowHint();updateFoldSummaries();});
 $('#years').addEventListener('change',()=>{renderContributionSchedule();scheduleSave();});
 $('#years').addEventListener('input',()=>{showAllContributionYears=false;renderContributionSchedule();});
@@ -363,11 +363,12 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal',sh
     const realNetMonthly=currentValueKRW(netMonthly,r);
     const realGrossMonthly=currentValueKRW(grossMonthly,r);
     const salary=Number(r.salaryIncome)||0;
+    const salaryGrowth=Number(r.salaryGrowth)||0;
     const fireOther=Number(r.fireOtherIncome)||0;
     const dividend=Number(r.netDividend)||0;
     const totalCash=Number(r.totalCashIn)||salary+fireOther+dividend;
     const realTotalCash=currentValueKRW(totalCash,r);
-    const cashflowBody=showCashflow?`<div class="tooltip-cashflow"><span>월 Cashflow</span><b>총 ${compactKRW(totalCash)}/월</b><strong>현재가치 ${compactKRW(realTotalCash)}/월</strong><small>월급 ${compactKRW(salary)} + 세후배당 ${compactKRW(dividend)}${fireOther>0?` + FIRE 후 기타소득 ${compactKRW(fireOther)}`:''}</small></div>`:'';
+    const cashflowBody=showCashflow?`<div class="tooltip-cashflow"><span>월 Cashflow</span><b>총 ${compactKRW(totalCash)}/월</b><strong>현재가치 ${compactKRW(realTotalCash)}/월</strong><small>월급 ${compactKRW(salary)} (연 ${salaryGrowth>=0?'+':''}${(salaryGrowth*100).toFixed(1)}%) + 세후배당 ${compactKRW(dividend)}${fireOther>0?` + FIRE 후 기타소득 ${compactKRW(fireOther)}`:''}</small></div>`:'';
     const body=cashflowBody+`<div class="tooltip-monthly"><span>${monthlyLabel}</span><b>명목 ${compactKRW(netMonthly)}/월</b><strong>현재가치 ${compactKRW(realNetMonthly)}/월</strong><small>세전 명목 ${compactKRW(grossMonthly)}/월 · 현재가치 ${compactKRW(realGrossMonthly)}/월</small></div>`+
       series.map(s=>nominalRealHTML(s.label,r[s.key],r)).join('')+
       nominalRealHTML('월 적립금',r.monthlyContribution||0,r,'/월')+
@@ -388,7 +389,7 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal',sh
     tip.classList.toggle('visible',showTip);
     tip.classList.toggle('pinned',pinned);
 
-    const cashflowReadout=showCashflow?`<b class="readout-cashflow">Cashflow ${compactKRW(totalCash)}/월 = 월급 ${compactKRW(salary)} + 세후배당 ${compactKRW(dividend)}${fireOther>0?` + FIRE 후 기타소득 ${compactKRW(fireOther)}`:''}</b>`:'';
+    const cashflowReadout=showCashflow?`<b class="readout-cashflow">Cashflow ${compactKRW(totalCash)}/월 = 월급 ${compactKRW(salary)} (연 ${salaryGrowth>=0?'+':''}${(salaryGrowth*100).toFixed(1)}%) + 세후배당 ${compactKRW(dividend)}${fireOther>0?` + FIRE 후 기타소득 ${compactKRW(fireOther)}`:''}</b>`:'';
     readout.innerHTML=`<strong>${calendarText(r,true)}</strong><span>${r.phase==='FIRE'?'🔥 FIRE 생활기':'축적기'}</span>${cashflowReadout}<b class="readout-monthly">${monthlyLabel} 명목 ${compactKRW(netMonthly)}/월 · 현재가치 ${compactKRW(realNetMonthly)}/월</b>${series.map(s=>`<b>${s.label} ${compactKRW(r[s.key])} (현재가치 ${compactKRW(currentValueKRW(r[s.key],r))})</b>`).join('')}<b>월 적립 ${compactKRW(r.monthlyContribution||0)} (현재가치 ${compactKRW(currentValueKRW(r.monthlyContribution||0,r))})</b><b>생활비 ${compactKRW(r.requiredFromPortfolio)} (현재가치 ${compactKRW(currentValueKRW(r.requiredFromPortfolio,r))})</b>`;
     readout.classList.add('active');
   }

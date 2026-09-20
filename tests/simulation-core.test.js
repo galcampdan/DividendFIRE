@@ -48,3 +48,21 @@ assert.strictEqual(salaryHover.rows[0].salaryIncome,3000000);
 assert.strictEqual(salaryHover.rows[0].netDividend,2550000);
 assert.strictEqual(salaryHover.rows[0].totalCashIn,5550000,'hover cashflow row must expose salary + after-tax dividend');
 console.log('hover cashflow row test: PASS');
+
+const salaryRise=core.simulate({
+  ...base,
+  monthlyIncome:3000000,
+  salaryGrowth:10,
+  fireExpenses:10000000,
+  years:3,
+  cashflowEnabled:true
+},market);
+const salary0=salaryRise.rows.find(r=>r.month===0);
+const salary12=salaryRise.rows.find(r=>r.month===12);
+const salary24=salaryRise.rows.find(r=>r.month===24);
+assert.strictEqual(salary0.salaryIncome,3000000);
+assert.strictEqual(salary12.salaryIncome,3300000,'10% annual salary growth should apply after 12 months');
+assert.strictEqual(salary24.salaryIncome,3630000,'annual salary growth should compound');
+assert.strictEqual(salary12.salaryYear,1);
+assert.strictEqual(salaryRise.salaryGrowth,0.10);
+console.log('salary growth compounding test: PASS');

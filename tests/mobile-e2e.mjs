@@ -53,6 +53,7 @@ try{
     if(vp.width===390){
       await page.locator('#initial').fill('60000');
       await page.locator('#income').fill('300');
+      await page.locator('#salaryGrowth').fill('10');
       await page.locator('#fireexp').fill('150');
       await page.locator('#contrib').fill('100');
 
@@ -72,6 +73,22 @@ try{
       assert.match(await page.locator('#cfReinvest').innerText(),/255/);
       assert.match(await page.locator('#cfRemaining').innerText(),/50/);
       assert.match(await page.locator('#currentDivCard').innerText(),/555/);
+
+      const salaryProjection=await page.evaluate(async()=>{
+        const body={
+          currentAge:25,startYear:new Date().getFullYear(),startMonth:new Date().getMonth()+1,
+          initialCapital:600000000,monthlyIncome:3000000,salaryGrowth:10,monthlyContribution:1000000,
+          fireExpenses:10000000,healthInsurance:0,postFireIncome:0,otherAnnualIncome:0,inflation:0,years:3,
+          dividendStress:0,withdrawalRate:4,fireMode:'withdrawal',reinvest:true,cashflowEnabled:true,
+          portfolio:[{ticker:'SCHD',weight:100,priceGrowth:0,distributionGrowth:0}]
+        };
+        const r=await fetch('/api/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const j=await r.json();
+        return {m0:j.rows.find(x=>x.month===0)?.salaryIncome,m12:j.rows.find(x=>x.month===12)?.salaryIncome,m24:j.rows.find(x=>x.month===24)?.salaryIncome};
+      });
+      assert.equal(salaryProjection.m0,3000000);
+      assert.equal(salaryProjection.m12,3300000);
+      assert.equal(salaryProjection.m24,3630000);
 
       // Touch-scrub tooltip: salary + dividend must appear, movement should haptic-tick,
       // and lifting the finger must clear the hover overlay.
@@ -149,6 +166,7 @@ try{
       await page.reload({waitUntil:'networkidle'});
       await waitDone(page);
       assert.equal(await page.locator('#income').inputValue(),'300');
+      assert.equal(await page.locator('#salaryGrowth').inputValue(),'10');
       assert.equal(await page.locator('#cashflowEnabled').isChecked(),true);
       assert.equal(await page.locator('.portfolio-row').count(),3);
       if(!(await page.locator('#annualDetails').getAttribute('open'))) await page.locator('#annualDetails summary').click();
