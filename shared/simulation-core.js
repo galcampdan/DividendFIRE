@@ -143,7 +143,7 @@ function simulate(p,market){
   }
   function makeRow(m,st,phase,shortfall,sale,saleTax,applied){
     var total=(startMonth-1)+m,cy=startYear+Math.floor(total/12),cm=(total%12)+1,age=currentAge+m/12;
-    var salaryIncome=phase==='FIRE'?0:monthlyIncome;
+    var salaryIncome=(m===0||phase!=='FIRE')?monthlyIncome:0;
     var fireOtherIncome=phase==='FIRE'?st.postFireIncome:0;
     var monthlyCashIncome=salaryIncome+fireOtherIncome;
     var totalCashIn=monthlyCashIncome+st.netDividend;
