@@ -60,11 +60,11 @@ try{
 
     if(vp.width===390){
       // First-visit defaults: useful demo values, while saved user settings still override them.
-      assert.equal(await page.locator('#age').inputValue(),'25');
-      assert.equal(await page.locator('#initial').inputValue(),'3000');
-      assert.equal(await page.locator('#income').inputValue(),'400');
-      assert.equal(await page.locator('#salaryGrowth').inputValue(),'4.0');
-      assert.equal(await page.locator('#employmentStartYear').inputValue(),String(new Date().getFullYear()));
+      assert.equal(await page.locator('#age').inputValue(),'20');
+      assert.equal(await page.locator('#initial').inputValue(),'500');
+      assert.equal(await page.locator('#income').inputValue(),'300');
+      assert.equal(await page.locator('#salaryGrowth').inputValue(),'3.6');
+      assert.equal(await page.locator('#employmentStartYear').inputValue(),String(new Date().getFullYear()+5));
       assert.equal(await page.locator('#fireexp').inputValue(),'200');
       assert.equal(await page.locator('#contrib').inputValue(),'120');
       assert.equal(await page.locator('#cashflowEnabled').isChecked(),true);
