@@ -246,17 +246,22 @@ try{
     await context.close();
   }
 
-  // Share-link round trip: sender settings become a URL, receiver previews first,
-  // and only changes local settings after explicit confirmation.
+  // Compact share-link round trip using the real-world sample that previously produced ~771 chars.
   const senderContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
   const sender=await senderContext.newPage();
   await sender.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
   await sender.goto(baseURL,{waitUntil:'networkidle'});
   await waitDone(sender);
-  await sender.locator('#initial').fill('12345');
-  await sender.locator('#income').fill('678');
+  const sampleFields={
+    age:'25',initial:'70000',income:'300',salaryGrowth:'4',employmentStartYear:'2031',
+    contrib:'0',fireexp:'250',health:'15',postFireIncome:'0',otherincome:'0',
+    inflation:'3.0',years:'40',withdrawalRate:'4',stress:'0'
+  };
+  for(const [id,value] of Object.entries(sampleFields)) await sender.locator('#'+id).fill(value);
+  await sender.locator('input[name="fireMode"][value="dividend"]').check();
   const shareUrl=await sender.evaluate(()=>createShareUrl());
-  assert.match(shareUrl,/#share=v1\./,'share URL must contain versioned settings payload');
+  assert.match(shareUrl,/#s=v2\./,'new share URL must use compact v2 payload');
+  assert.ok(shareUrl.length<=220,`compact share URL too long: ${shareUrl.length} chars`);
   await senderContext.close();
 
   const friendContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
@@ -266,17 +271,31 @@ try{
   await waitDone(friend);
   assert.equal(await friend.locator('#sharedSettingsBanner').isVisible(),true,'shared settings must be previewed before apply');
   assert.equal(await friend.locator('#initial').inputValue(),'500','shared settings must not auto-overwrite receiver settings');
-  assert.match(await friend.locator('#sharedSettingsSummary').innerText(),/12,345만원/);
+  assert.match(await friend.locator('#sharedSettingsSummary').innerText(),/70,000만원/);
   await friend.locator('#applySharedSettings').click();
   await waitDone(friend);
-  assert.equal(await friend.locator('#initial').inputValue(),'12345');
-  assert.equal(await friend.locator('#income').inputValue(),'678');
+  assert.equal(await friend.locator('#initial').inputValue(),'70000');
+  assert.equal(await friend.locator('#income').inputValue(),'300');
+  assert.equal(await friend.locator('input[name="fireMode"][value="dividend"]').isChecked(),true);
   assert.equal(await friend.locator('#sharedSettingsBanner').isVisible(),false);
   assert.equal(await friend.evaluate(()=>location.hash),'','share hash should be removed after explicit apply');
   await friend.reload({waitUntil:'networkidle'});
   await waitDone(friend);
-  assert.equal(await friend.locator('#initial').inputValue(),'12345','applied shared settings must persist');
+  assert.equal(await friend.locator('#initial').inputValue(),'70000','applied shared settings must persist');
   await friendContext.close();
+
+  // Legacy v1 links must remain readable after v2 compact links ship.
+  const legacyContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
+  const legacyPage=await legacyContext.newPage();
+  await legacyPage.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
+  await legacyPage.goto(baseURL,{waitUntil:'networkidle'});
+  await waitDone(legacyPage);
+  const legacyUrl=await legacyPage.evaluate(()=>location.origin+location.pathname+'#share='+encodeLegacySharePayload(settingsSnapshot()));
+  await legacyPage.goto(legacyUrl,{waitUntil:'networkidle'});
+  await waitDone(legacyPage);
+  assert.equal(await legacyPage.locator('#sharedSettingsBanner').isVisible(),true,'legacy v1 share links must still open');
+  await legacyContext.close();
+
   // Built-site smoke test without mocked market.json: validates the actual generated snapshot path.
   const realContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
   const realPage=await realContext.newPage();

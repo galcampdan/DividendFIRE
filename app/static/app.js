@@ -1,6 +1,6 @@
 
-const UI_VERSION='v2.0.12';
-const MODERN_BUILD='2026-09-22-v2.0.12-share-links-1';
+const UI_VERSION='v2.0.13';
+const MODERN_BUILD='2026-09-22-v2.0.13-share-links-1';
 const LEGACY_APP_VERSION='v8.9.3';
 const LEGACY_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
 async function verifyBuild(){
@@ -16,7 +16,7 @@ async function verifyBuild(){
       if(proof){proof.textContent=`⚠ 빌드 불일치: UI ${UI_VERSION} / runtime ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
       throw new Error('앱 파일 버전이 서로 다릅니다. 새로고침하거나 최신 버전을 사용하세요.');
     }
-    if(proof){proof.textContent=modern?'✓ v2.0.12 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
+    if(proof){proof.textContent=modern?'✓ v2.0.13 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
     return true;
   }catch(e){
     if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ 실행 환경 확인 실패: '+e.message;proof.classList.add('bad');}
@@ -92,36 +92,120 @@ function applySettings(v){
 function saveLocal(snapshot){
   try{ localStorage.setItem(SETTINGS_KEY,JSON.stringify(snapshot)); }catch(_){}
 }
-const SHARE_SCHEMA_VERSION = 1;
+const SHARE_SCHEMA_VERSION = 2;
+const SHARE_FIELD_IDS = ['age','initial','income','salaryGrowth','employmentStartYear','contrib','fireexp','health','postFireIncome','otherincome','inflation','years','withdrawalRate','stress'];
 const PUBLIC_SHARE_URL = 'https://galcampdan.github.io/DividendFIRE/';
 let pendingSharedSettings = null;
 let shareToastTimer = null;
 
-function encodeSharePayload(settings){
-  const envelope={schema:SHARE_SCHEMA_VERSION,app:'DividendFIRE',settings};
-  const bytes=new TextEncoder().encode(JSON.stringify(envelope));
+function bytesToBase64Url(bytes){
   let binary='';
   for(let i=0;i<bytes.length;i++) binary+=String.fromCharCode(bytes[i]);
-  return 'v1.'+btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function decodeSharePayload(raw){
-  const value=String(raw||'');
-  if(!value.startsWith('v1.')||value.length>32000) throw new Error('지원하지 않는 공유 링크입니다.');
-  const b64=value.slice(3).replace(/-/g,'+').replace(/_/g,'/');
+function base64UrlToBytes(raw){
+  const b64=String(raw||'').replace(/-/g,'+').replace(/_/g,'/');
   const padded=b64+'='.repeat((4-b64.length%4)%4);
   const binary=atob(padded);
   const bytes=new Uint8Array(binary.length);
   for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
-  const envelope=JSON.parse(new TextDecoder().decode(bytes));
-  if(!envelope||envelope.schema!==SHARE_SCHEMA_VERSION||envelope.app!=='DividendFIRE'||!envelope.settings||typeof envelope.settings!=='object'){
+  return bytes;
+}
+function encodeLegacySharePayload(settings){
+  const envelope={schema:1,app:'DividendFIRE',settings};
+  return 'v1.'+bytesToBase64Url(new TextEncoder().encode(JSON.stringify(envelope)));
+}
+function decodeLegacySharePayload(raw){
+  const value=String(raw||'');
+  if(!value.startsWith('v1.')||value.length>32000) throw new Error('지원하지 않는 공유 링크입니다.');
+  const envelope=JSON.parse(new TextDecoder().decode(base64UrlToBytes(value.slice(3))));
+  if(!envelope||envelope.schema!==1||envelope.app!=='DividendFIRE'||!envelope.settings||typeof envelope.settings!=='object'){
     throw new Error('공유 설정 형식이 올바르지 않습니다.');
   }
   return envelope.settings;
 }
-function createShareUrl(){
-  const payload=encodeSharePayload(settingsSnapshot());
+function compactShareSettings(settings){
+  const f=(settings&&settings.fields)||{};
+  const fields=SHARE_FIELD_IDS.map(id=>{
+    const raw=f[id];
+    if(raw===undefined||raw===null||raw==='') return null;
+    const n=Number(raw);
+    return Number.isFinite(n)?n:String(raw);
+  });
+  const flags=(settings?.fireMode==='dividend'?1:0)|(settings?.reinvest!==false?2:0)|(settings?.cashflowEnabled===true?4:0);
+  const pf=(Array.isArray(settings?.portfolio)?settings.portfolio:[]).map(x=>[
+    sanitizeTicker(x.ticker),
+    Number(x.weight)||0,
+    Number(x.priceGrowth)||0,
+    Number(x.distributionGrowth)||0
+  ]).filter(x=>x[0]);
+  const schedule=Object.entries(settings?.contributionSchedule||{})
+    .map(([year,value])=>[Number(year),Number(value)])
+    .filter(([year,value])=>Number.isFinite(year)&&Number.isFinite(value))
+    .sort((a,b)=>a[0]-b[0]);
+  return [SHARE_SCHEMA_VERSION,fields,flags,pf,schedule];
+}
+function expandCompactShareSettings(data){
+  if(!Array.isArray(data)||data[0]!==SHARE_SCHEMA_VERSION||!Array.isArray(data[1])||!Array.isArray(data[3])||!Array.isArray(data[4])){
+    throw new Error('공유 설정 형식이 올바르지 않습니다.');
+  }
+  const fields={};
+  SHARE_FIELD_IDS.forEach((id,i)=>{
+    const value=data[1][i];
+    if(value!==undefined&&value!==null) fields[id]=String(value);
+  });
+  const flags=Number(data[2])||0;
+  const portfolio=data[3].map(row=>({
+    ticker:sanitizeTicker(row?.[0]),
+    weight:Number(row?.[1])||0,
+    priceGrowth:Number(row?.[2])||0,
+    distributionGrowth:Number(row?.[3])||0
+  })).filter(x=>x.ticker);
+  const contributionSchedule={};
+  data[4].forEach(row=>{
+    const year=Number(row?.[0]),value=Number(row?.[1]);
+    if(Number.isFinite(year)&&year>=1900&&year<=2300&&Number.isFinite(value)&&value>=0) contributionSchedule[String(Math.trunc(year))]=value;
+  });
+  return {
+    fields,
+    fireMode:(flags&1)?'dividend':'withdrawal',
+    reinvest:!!(flags&2),
+    cashflowEnabled:!!(flags&4),
+    portfolio,
+    contributionSchedule
+  };
+}
+async function deflateBytes(bytes){
+  if(typeof CompressionStream!=='function') throw new Error('이 브라우저는 압축 공유를 지원하지 않습니다.');
+  const stream=new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function inflateBytes(bytes){
+  if(typeof DecompressionStream!=='function') throw new Error('이 브라우저는 압축 공유 링크를 지원하지 않습니다.');
+  const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function encodeCompactSharePayload(settings){
+  const compact=compactShareSettings(settings);
+  const compressed=await deflateBytes(new TextEncoder().encode(JSON.stringify(compact)));
+  return 'v2.'+bytesToBase64Url(compressed);
+}
+async function decodeCompactSharePayload(raw){
+  const value=String(raw||'');
+  if(!value.startsWith('v2.')||value.length>12000) throw new Error('지원하지 않는 공유 링크입니다.');
+  const inflated=await inflateBytes(base64UrlToBytes(value.slice(3)));
+  if(inflated.length>64000) throw new Error('공유 설정이 너무 큽니다.');
+  return expandCompactShareSettings(JSON.parse(new TextDecoder().decode(inflated)));
+}
+async function createShareUrl(){
   const webBase=window.__TAURI_INTERNALS__ ? PUBLIC_SHARE_URL : (location.origin+location.pathname);
-  return webBase+(window.__TAURI_INTERNALS__?'':location.search)+'#share='+payload;
+  const base=webBase+(window.__TAURI_INTERNALS__?'':location.search);
+  try{
+    return base+'#s='+await encodeCompactSharePayload(settingsSnapshot());
+  }catch(e){
+    console.warn('Compact share unavailable; falling back to v1.',e);
+    return base+'#share='+encodeLegacySharePayload(settingsSnapshot());
+  }
 }
 function showShareToast(text,kind=''){
   const el=$('#shareToast'); if(!el)return;
@@ -140,7 +224,7 @@ async function copyShareUrl(url){
   if(!ok) throw new Error('클립보드 복사 실패');
 }
 async function shareCurrentSettings(){
-  const url=createShareUrl();
+  const url=await createShareUrl();
   const data={title:'Dividend FIRE 설정',text:'내 Dividend FIRE 시뮬레이션 설정을 공유합니다.',url};
   if(navigator.share){
     try{
@@ -153,7 +237,7 @@ async function shareCurrentSettings(){
   }
   try{
     await copyShareUrl(url);
-    showShareToast(url.length>8000?'공유 링크를 복사했습니다. 설정이 많아 링크가 깁니다.':'공유 링크를 복사했습니다.','ok');
+    showShareToast(url.length>1200?'공유 링크를 복사했습니다.':'짧은 공유 링크를 복사했습니다.','ok');
   }catch(_){
     window.prompt('아래 공유 링크를 복사하세요.',url);
   }
@@ -170,15 +254,16 @@ function sharedSettingsSummary(settings){
   return parts.join(' · ')||'공유된 시뮬레이션 입력값';
 }
 function clearShareHash(){
-  if(!location.hash.startsWith('#share=')) return;
+  if(!location.hash.startsWith('#share=')&&!location.hash.startsWith('#s=')) return;
   history.replaceState(null,'',location.pathname+location.search);
 }
-function setupSharedSettingsUI(){
+async function setupSharedSettingsUI(){
   const params=new URLSearchParams(location.hash.replace(/^#/,''));
-  const raw=params.get('share');
-  if(!raw)return;
+  const compactRaw=params.get('s');
+  const legacyRaw=params.get('share');
+  if(!compactRaw&&!legacyRaw)return;
   try{
-    pendingSharedSettings=decodeSharePayload(raw);
+    pendingSharedSettings=compactRaw?await decodeCompactSharePayload(compactRaw):decodeLegacySharePayload(legacyRaw);
   }catch(e){
     showShareToast('공유 링크를 읽지 못했습니다: '+e.message,'bad');
     clearShareHash();
@@ -655,7 +740,7 @@ async function boot(){
   updateCashflowHint();
   bindAutoSave();
   bindSharing();
-  setupSharedSettingsUI();
+  await setupSharedSettingsUI();
   scheduleSave();
   runSimulation();
 }
