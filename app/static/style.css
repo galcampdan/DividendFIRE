@@ -309,7 +309,7 @@ body{min-width:0}button,input,select,summary,a{touch-action:manipulation}
   .chart-tooltip>.tooltip-cashflow .tooltip-cashflow-breakdown{grid-template-columns:1fr 1fr}
 }
 
-/* v2.0.15: compact Deflate share links */
+/* v2.0.16: ephemeral compact share links */
 .share-banner[hidden],.share-toast[hidden]{display:none!important}
 .share-toast{position:fixed;left:50%;top:18px;z-index:100;transform:translateX(-50%);max-width:min(560px,calc(100vw - 28px));padding:10px 14px;border:1px solid #d9dde2;border-radius:12px;background:#fff;box-shadow:0 8px 28px rgba(0,0,0,.13);font-size:12px;font-weight:800;color:#333}
 .share-toast.ok{background:#eef8f1;border-color:#cfe6d5;color:#23673a}.share-toast.bad{background:#fff0f0;border-color:#edcaca;color:#a32222}
@@ -318,3 +318,5 @@ body{min-width:0}button,input,select,summary,a{touch-action:manipulation}
 .share-banner-actions{display:flex;gap:7px;flex:0 0 auto}.share-banner-actions button{min-height:40px;border:0;border-radius:10px;padding:9px 12px;background:#111;color:#fff;font-weight:800;cursor:pointer}.share-banner-actions .share-dismiss{border:1px solid #d7dbe0;background:#fff;color:#333}
 @media(max-width:900px){.hero-actions{justify-content:flex-start}.share-banner{align-items:stretch;flex-direction:column}.share-banner-actions{width:100%}.share-banner-actions button{flex:1}}
 @media(max-width:700px){.hero .share-button{min-height:42px}.share-banner{margin:0 0 10px;padding:11px}.share-banner-actions button{min-height:44px}.mobile-action-bar{grid-template-columns:1.15fr .7fr .7fr!important}.mobile-action-bar .mobile-share-button{border:1px solid #d9dce0;background:#fff;color:#222}}
+
+/* Shared links are temporary views; friend values never persist over the receiver's saved settings. */

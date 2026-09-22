@@ -1,6 +1,6 @@
 
-const UI_VERSION='v2.0.15';
-const MODERN_BUILD='2026-09-22-v2.0.15-share-links-1';
+const UI_VERSION='v2.0.16';
+const MODERN_BUILD='2026-09-22-v2.0.16-share-links-1';
 const LEGACY_APP_VERSION='v8.9.3';
 const LEGACY_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
 async function verifyBuild(){
@@ -16,7 +16,7 @@ async function verifyBuild(){
       if(proof){proof.textContent=`⚠ 빌드 불일치: UI ${UI_VERSION} / runtime ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
       throw new Error('앱 파일 버전이 서로 다릅니다. 새로고침하거나 최신 버전을 사용하세요.');
     }
-    if(proof){proof.textContent=modern?'✓ v2.0.15 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
+    if(proof){proof.textContent=modern?'✓ v2.0.16 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
     return true;
   }catch(e){
     if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ 실행 환경 확인 실패: '+e.message;proof.classList.add('bad');}
@@ -95,7 +95,7 @@ function saveLocal(snapshot){
 const SHARE_SCHEMA_VERSION = 2;
 const SHARE_FIELD_IDS = ['age','initial','income','salaryGrowth','employmentStartYear','contrib','fireexp','health','postFireIncome','otherincome','inflation','years','withdrawalRate','stress'];
 const PUBLIC_SHARE_URL = 'https://galcampdan.github.io/DividendFIRE/';
-let pendingSharedSettings = null;
+let sharedViewActive = false;
 let shareToastTimer = null;
 
 function bytesToBase64Url(bytes){
@@ -242,65 +242,71 @@ async function shareCurrentSettings(){
     window.prompt('아래 공유 링크를 복사하세요.',url);
   }
 }
-function sharedSettingsSummary(settings){
-  const f=(settings&&settings.fields)||{};
-  const pf=Array.isArray(settings&&settings.portfolio)?settings.portfolio:[];
-  const tickers=pf.map(x=>sanitizeTicker(x.ticker)).filter(Boolean).slice(0,5);
-  const extra=pf.length>5?' 외 '+(pf.length-5)+'개':'';
-  const parts=[];
-  if(f.age!==undefined) parts.push('현재 '+f.age+'세');
-  if(f.initial!==undefined) parts.push('투자자산 '+Number(f.initial||0).toLocaleString('ko-KR')+'만원');
-  if(tickers.length) parts.push('포트폴리오 '+tickers.join(' · ')+extra);
-  return parts.join(' · ')||'공유된 시뮬레이션 입력값';
+function hasSharedSettingsHash(){
+  const params=new URLSearchParams(location.hash.replace(/^#/,''));
+  return !!(params.get('s')||params.get('share'));
 }
-function clearShareHash(){
-  if(!location.hash.startsWith('#share=')&&!location.hash.startsWith('#s=')) return;
-  history.replaceState(null,'',location.pathname+location.search);
-}
-async function setupSharedSettingsUI(){
+async function decodeSharedSettingsFromHash(){
   const params=new URLSearchParams(location.hash.replace(/^#/,''));
   const compactRaw=params.get('s');
   const legacyRaw=params.get('share');
-  if(!compactRaw&&!legacyRaw)return;
-  try{
-    pendingSharedSettings=compactRaw?await decodeCompactSharePayload(compactRaw):decodeLegacySharePayload(legacyRaw);
-  }catch(e){
-    showShareToast('공유 링크를 읽지 못했습니다: '+e.message,'bad');
-    clearShareHash();
-    return;
-  }
-  const banner=$('#sharedSettingsBanner'),summary=$('#sharedSettingsSummary');
-  if(summary)summary.textContent=sharedSettingsSummary(pendingSharedSettings);
-  if(banner)banner.hidden=false;
+  if(!compactRaw&&!legacyRaw) return null;
+  return compactRaw?await decodeCompactSharePayload(compactRaw):decodeLegacySharePayload(legacyRaw);
 }
-function applyPendingSharedSettings(){
-  if(!pendingSharedSettings)return;
-  if(!applySettings(pendingSharedSettings)){
-    showShareToast('공유 설정을 적용하지 못했습니다.','bad');return;
-  }
+function clearShareHash(){
+  if(!hasSharedSettingsHash()) return;
+  history.replaceState(null,'',location.pathname+location.search);
+}
+function renderCurrentSettingsState(){
   renderPF();
   showAllContributionYears=false;
+  syncResponsiveFolds(true);
   renderContributionSchedule();
   updateModeUI();
   updateFoldSummaries();
   updateCashflowHint();
-  scheduleSave();
-  runSimulation();
-  pendingSharedSettings=null;
-  const banner=$('#sharedSettingsBanner');if(banner)banner.hidden=true;
-  clearShareHash();
-  showShareToast('친구의 설정을 적용했습니다.','ok');
 }
-function dismissSharedSettings(){
-  pendingSharedSettings=null;
-  const banner=$('#sharedSettingsBanner');if(banner)banner.hidden=true;
-  clearShareHash();
-  showShareToast('공유 설정을 적용하지 않았습니다.');
+async function applySharedSettingsFromHash({announce=false}={}){
+  if(!hasSharedSettingsHash()) return false;
+  try{
+    const settings=await decodeSharedSettingsFromHash();
+    if(!settings||!applySettings(settings)) throw new Error('공유 설정을 적용하지 못했습니다.');
+    sharedViewActive=true;
+    setSaveStatus('공유 설정 임시 보기','warn');
+    if(announce) showShareToast('친구 설정을 임시로 불러왔습니다. 내 설정은 그대로 보관됩니다.','ok');
+    return true;
+  }catch(e){
+    sharedViewActive=false;
+    showShareToast('공유 링크를 읽지 못했습니다: '+e.message,'bad');
+    clearShareHash();
+    return false;
+  }
+}
+async function restoreOwnSettingsView({announce=false}={}){
+  sharedViewActive=false;
+  await loadSettings();
+  if($('#employmentStartYear')&&!String($('#employmentStartYear').value||'').trim()) $('#employmentStartYear').value=String(new Date().getFullYear()+5);
+  renderCurrentSettingsState();
+  setSaveStatus('내 설정','saved');
+  runSimulation();
+  if(announce) showShareToast('내 설정으로 돌아왔습니다.','ok');
+}
+async function handleShareNavigation(){
+  if(hasSharedSettingsHash()){
+    const applied=await applySharedSettingsFromHash({announce:true});
+    if(applied){
+      renderCurrentSettingsState();
+      runSimulation();
+    }else{
+      await restoreOwnSettingsView();
+    }
+  }else if(sharedViewActive){
+    await restoreOwnSettingsView({announce:true});
+  }
 }
 function bindSharing(){
-  $$('.share-settings').forEach(btn=>btn.addEventListener('click',shareCurrentSettings));
-  $('#applySharedSettings')?.addEventListener('click',applyPendingSharedSettings);
-  $('#dismissSharedSettings')?.addEventListener('click',dismissSharedSettings);
+  $('.share-settings').forEach(btn=>btn.addEventListener('click',shareCurrentSettings));
+  window.addEventListener('hashchange',()=>{handleShareNavigation().catch(e=>showShareToast('설정 전환 오류: '+e.message,'bad'));});
 }
 function restoreLocal(){
   try{
@@ -321,6 +327,10 @@ function setSaveStatus(text,kind=''){
   const el=$('#saveStatus'); if(!el)return; el.textContent=text; el.className='save-status '+kind;
 }
 function scheduleSave(){
+  if(sharedViewActive){
+    setSaveStatus('공유 설정 임시 보기','warn');
+    return;
+  }
   const snapshot=settingsSnapshot();
   saveLocal(snapshot);
   setSaveStatus('저장 중…','saving');
@@ -732,16 +742,12 @@ async function boot(){
   await verifyBuild();
   await loadSettings();
   if($('#employmentStartYear')&&!String($('#employmentStartYear').value||'').trim()) $('#employmentStartYear').value=String(new Date().getFullYear()+5);
-  renderPF();
-  syncResponsiveFolds(true);
-  renderContributionSchedule();
-  updateModeUI();
-  updateFoldSummaries();
-  updateCashflowHint();
+  await applySharedSettingsFromHash({announce:hasSharedSettingsHash()});
+  renderCurrentSettingsState();
   bindAutoSave();
   bindSharing();
-  await setupSharedSettingsUI();
-  scheduleSave();
+  if(sharedViewActive) setSaveStatus('공유 설정 임시 보기','warn');
+  else scheduleSave();
   runSimulation();
 }
 boot();

@@ -246,7 +246,7 @@ try{
     await context.close();
   }
 
-  // Compact share-link round trip using the real-world sample that previously produced ~771 chars.
+  // Compact share-link round trip: shared settings are an ephemeral view, never a persistent overwrite.
   const senderContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
   const sender=await senderContext.newPage();
   await sender.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
@@ -268,39 +268,76 @@ try{
   assert.ok(shareUrl.length<=220,`compact share URL too long: ${shareUrl.length} chars`);
   await senderContext.close();
 
+  // Save receiver's own settings first.
   const friendContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
   const friend=await friendContext.newPage();
   await friend.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
-  await friend.goto(shareUrl,{waitUntil:'networkidle'});
+  await friend.goto(baseURL,{waitUntil:'networkidle'});
   await waitDone(friend);
-  assert.equal(await friend.locator('#sharedSettingsBanner').isVisible(),true,'shared settings must be previewed before apply');
-  assert.equal(await friend.locator('#initial').inputValue(),'500','shared settings must not auto-overwrite receiver settings');
-  assert.match(await friend.locator('#sharedSettingsSummary').innerText(),/70,000만원/);
-  await friend.locator('#applySharedSettings').click();
+  await friend.locator('#initial').fill('54321');
+  await friend.locator('#income').fill('987');
+  await friend.waitForTimeout(450);
+  const ownBefore=await friend.evaluate(()=>JSON.parse(localStorage.getItem('DividendFireMVP.settings.v2')));
+  assert.equal(ownBefore.fields.initial,'54321');
+  assert.equal(ownBefore.fields.income,'987');
+
+  // Same-tab shared hash applies immediately but remains temporary.
+  await friend.evaluate(url=>{location.href=url;},shareUrl);
+  await friend.waitForFunction(()=>document.querySelector('#initial')?.value==='70000');
   await waitDone(friend);
-  assert.equal(await friend.locator('#initial').inputValue(),'70000');
+  assert.equal(await friend.locator('#initial').inputValue(),'70000','shared settings must apply immediately');
   assert.equal(await friend.locator('#income').inputValue(),'300');
   assert.equal(await friend.locator('input[name="fireMode"][value="dividend"]').isChecked(),true);
-  assert.equal(await friend.locator('#sharedSettingsBanner').isVisible(),false);
-  assert.equal(await friend.evaluate(()=>location.hash),'','share hash should be removed after explicit apply');
-  await friend.reload({waitUntil:'networkidle'});
+  assert.equal(await friend.locator('#sharedSettingsBanner').count(),0,'shared settings must not require an apply banner');
+  assert.match(await friend.locator('#saveStatus').innerText(),/임시 보기/);
+  const ownDuringShare=await friend.evaluate(()=>JSON.parse(localStorage.getItem('DividendFireMVP.settings.v2')));
+  assert.equal(ownDuringShare.fields.initial,'54321','opening a shared link must not overwrite saved settings');
+  assert.equal(ownDuringShare.fields.income,'987');
+
+  // Edits while viewing a shared link must stay temporary too.
+  await friend.locator('#initial').fill('88888');
+  await friend.waitForTimeout(450);
+  const ownAfterSharedEdit=await friend.evaluate(()=>JSON.parse(localStorage.getItem('DividendFireMVP.settings.v2')));
+  assert.equal(ownAfterSharedEdit.fields.initial,'54321','editing a shared view must not persist over receiver settings');
+
+  // Browser Back removes the share hash and restores the receiver's saved values.
+  await friend.goBack();
+  await friend.waitForFunction(()=>location.hash===''&&document.querySelector('#initial')?.value==='54321');
   await waitDone(friend);
-  assert.equal(await friend.locator('#initial').inputValue(),'70000','applied shared settings must persist');
+  assert.equal(await friend.locator('#income').inputValue(),'987','Back must restore receiver settings');
+
+  // A directly-opened share link also stays temporary; entering the plain app URL restores own values.
+  const direct=await friendContext.newPage();
+  await direct.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
+  await direct.goto(shareUrl,{waitUntil:'networkidle'});
+  await waitDone(direct);
+  assert.equal(await direct.locator('#initial').inputValue(),'70000','direct shared link must show sender settings immediately');
+  await direct.goto(baseURL,{waitUntil:'networkidle'});
+  await waitDone(direct);
+  assert.equal(await direct.locator('#initial').inputValue(),'54321','plain app URL must restore receiver settings');
+  assert.equal(await direct.locator('#income').inputValue(),'987');
   await friendContext.close();
 
-  // Legacy v1 links must remain readable after v2 compact links ship.
+  // Legacy v1 links follow the same ephemeral behavior and remain readable.
   const legacyContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
   const legacyPage=await legacyContext.newPage();
   await legacyPage.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
   await legacyPage.goto(baseURL,{waitUntil:'networkidle'});
   await waitDone(legacyPage);
-  const legacyUrl=await legacyPage.evaluate(()=>location.origin+location.pathname+'#share='+encodeLegacySharePayload(settingsSnapshot()));
-  await legacyPage.close();
-  const legacyReceiver=await legacyContext.newPage();
-  await legacyReceiver.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
-  await legacyReceiver.goto(legacyUrl,{waitUntil:'networkidle'});
-  await waitDone(legacyReceiver);
-  assert.equal(await legacyReceiver.locator('#sharedSettingsBanner').isVisible(),true,'legacy v1 share links must still open');
+  await legacyPage.locator('#initial').fill('11111');
+  await legacyPage.waitForTimeout(350);
+  const legacyUrl=await legacyPage.evaluate(()=>{
+    const s=settingsSnapshot();
+    s.fields.initial='22222';
+    return location.origin+location.pathname+'#share='+encodeLegacySharePayload(s);
+  });
+  await legacyPage.evaluate(url=>{location.href=url;},legacyUrl);
+  await legacyPage.waitForFunction(()=>document.querySelector('#initial')?.value==='22222');
+  await waitDone(legacyPage);
+  assert.equal(await legacyPage.locator('#initial').inputValue(),'22222','legacy v1 share link must apply immediately');
+  await legacyPage.goBack();
+  await legacyPage.waitForFunction(()=>location.hash===''&&document.querySelector('#initial')?.value==='11111');
+  await waitDone(legacyPage);
   await legacyContext.close();
 
   // Built-site smoke test without mocked market.json: validates the actual generated snapshot path.
@@ -349,14 +386,20 @@ try{
   assert.equal(errors.length,0,`WebKit page errors: ${errors.join('; ')}`);
   assert.equal(await page.locator('.mobile-action-bar').isVisible(),true);
   assert.equal(await page.locator('#assetChart svg').count(),1);
+  await page.locator('#initial').fill('24680');
   const webkitShareUrl=await page.evaluate(()=>createShareUrl());
   assert.match(webkitShareUrl,/#s=v2\./,'WebKit must support compact Deflate share links');
   assert.ok(webkitShareUrl.length<=220,`WebKit compact share URL too long: ${webkitShareUrl.length} chars`);
+  await page.locator('#initial').fill('13579');
+  await page.waitForTimeout(350);
   const webkitReceiver=await context.newPage();
   await webkitReceiver.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
   await webkitReceiver.goto(webkitShareUrl,{waitUntil:'networkidle'});
   await waitDone(webkitReceiver);
-  assert.equal(await webkitReceiver.locator('#sharedSettingsBanner').isVisible(),true,'WebKit must decode compact share links');
+  assert.equal(await webkitReceiver.locator('#initial').inputValue(),'24680','WebKit must immediately apply compact shared settings');
+  await webkitReceiver.goto(baseURL,{waitUntil:'networkidle'});
+  await waitDone(webkitReceiver);
+  assert.equal(await webkitReceiver.locator('#initial').inputValue(),'13579','WebKit plain URL must restore saved own settings');
   await webkitReceiver.close();
   await page.locator('#income').fill('321');
   await page.locator('#mobileRun').click();
