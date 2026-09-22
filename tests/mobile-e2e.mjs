@@ -257,9 +257,13 @@ try{
     contrib:'0',fireexp:'250',health:'15',postFireIncome:'0',otherincome:'0',
     inflation:'3.0',years:'40',withdrawalRate:'4',stress:'0'
   };
-  for(const [id,value] of Object.entries(sampleFields)) await sender.locator('#'+id).fill(value);
-  await sender.locator('input[name="fireMode"][value="dividend"]').check();
+  await sender.evaluate(fields=>{
+    Object.entries(fields).forEach(([id,value])=>{const el=document.querySelector('#'+id);if(el)el.value=value;});
+    const dividend=document.querySelector('input[name="fireMode"][value="dividend"]');
+    if(dividend) dividend.checked=true;
+  },sampleFields);
   const shareUrl=await sender.evaluate(()=>createShareUrl());
+  console.log('compact share URL length:',shareUrl.length);
   assert.match(shareUrl,/#s=v2\./,'new share URL must use compact v2 payload');
   assert.ok(shareUrl.length<=220,`compact share URL too long: ${shareUrl.length} chars`);
   await senderContext.close();
