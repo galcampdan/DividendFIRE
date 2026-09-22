@@ -1,6 +1,6 @@
 
-const UI_VERSION='v2.0.9';
-const MODERN_BUILD='2026-09-20-v2.0.9-soft-haptics-1';
+const UI_VERSION='v2.0.10';
+const MODERN_BUILD='2026-09-22-v2.0.10-share-links-1';
 const LEGACY_APP_VERSION='v8.9.3';
 const LEGACY_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
 async function verifyBuild(){
@@ -16,7 +16,7 @@ async function verifyBuild(){
       if(proof){proof.textContent=`⚠ 빌드 불일치: UI ${UI_VERSION} / runtime ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
       throw new Error('앱 파일 버전이 서로 다릅니다. 새로고침하거나 최신 버전을 사용하세요.');
     }
-    if(proof){proof.textContent=modern?'✓ v2.0.9 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
+    if(proof){proof.textContent=modern?'✓ v2.0.10 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
     return true;
   }catch(e){
     if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ 실행 환경 확인 실패: '+e.message;proof.classList.add('bad');}
@@ -91,6 +91,131 @@ function applySettings(v){
 }
 function saveLocal(snapshot){
   try{ localStorage.setItem(SETTINGS_KEY,JSON.stringify(snapshot)); }catch(_){}
+}
+const SHARE_SCHEMA_VERSION = 1;
+const PUBLIC_SHARE_URL = 'https://galcampdan.github.io/DividendFIRE/';
+let pendingSharedSettings = null;
+let shareToastTimer = null;
+
+function encodeSharePayload(settings){
+  const envelope={schema:SHARE_SCHEMA_VERSION,app:'DividendFIRE',settings};
+  const bytes=new TextEncoder().encode(JSON.stringify(envelope));
+  let binary='';
+  for(let i=0;i<bytes.length;i++) binary+=String.fromCharCode(bytes[i]);
+  return 'v1.'+btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function decodeSharePayload(raw){
+  const value=String(raw||'');
+  if(!value.startsWith('v1.')||value.length>32000) throw new Error('지원하지 않는 공유 링크입니다.');
+  const b64=value.slice(3).replace(/-/g,'+').replace(/_/g,'/');
+  const padded=b64+'='.repeat((4-b64.length%4)%4);
+  const binary=atob(padded);
+  const bytes=new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+  const envelope=JSON.parse(new TextDecoder().decode(bytes));
+  if(!envelope||envelope.schema!==SHARE_SCHEMA_VERSION||envelope.app!=='DividendFIRE'||!envelope.settings||typeof envelope.settings!=='object'){
+    throw new Error('공유 설정 형식이 올바르지 않습니다.');
+  }
+  return envelope.settings;
+}
+function createShareUrl(){
+  const payload=encodeSharePayload(settingsSnapshot());
+  const webBase=window.__TAURI_INTERNALS__ ? PUBLIC_SHARE_URL : (location.origin+location.pathname);
+  return webBase+(window.__TAURI_INTERNALS__?'':location.search)+'#share='+payload;
+}
+function showShareToast(text,kind=''){
+  const el=$('#shareToast'); if(!el)return;
+  clearTimeout(shareToastTimer);
+  el.textContent=text;el.className='share-toast '+kind;el.hidden=false;
+  shareToastTimer=setTimeout(()=>{el.hidden=true;},3200);
+}
+async function copyShareUrl(url){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    await navigator.clipboard.writeText(url); return;
+  }
+  const ta=document.createElement('textarea');
+  ta.value=url;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  const ok=document.execCommand('copy');ta.remove();
+  if(!ok) throw new Error('클립보드 복사 실패');
+}
+async function shareCurrentSettings(){
+  const url=createShareUrl();
+  const data={title:'Dividend FIRE 설정',text:'내 Dividend FIRE 시뮬레이션 설정을 공유합니다.',url};
+  if(navigator.share){
+    try{
+      await navigator.share(data);
+      showShareToast('공유 창을 열었습니다.','ok');
+      return;
+    }catch(e){
+      if(e&&e.name==='AbortError') return;
+    }
+  }
+  try{
+    await copyShareUrl(url);
+    showShareToast(url.length>8000?'공유 링크를 복사했습니다. 설정이 많아 링크가 깁니다.':'공유 링크를 복사했습니다.','ok');
+  }catch(_){
+    window.prompt('아래 공유 링크를 복사하세요.',url);
+  }
+}
+function sharedSettingsSummary(settings){
+  const f=(settings&&settings.fields)||{};
+  const pf=Array.isArray(settings&&settings.portfolio)?settings.portfolio:[];
+  const tickers=pf.map(x=>sanitizeTicker(x.ticker)).filter(Boolean).slice(0,5);
+  const extra=pf.length>5?' 외 '+(pf.length-5)+'개':'';
+  const parts=[];
+  if(f.age!==undefined) parts.push('현재 '+f.age+'세');
+  if(f.initial!==undefined) parts.push('투자자산 '+Number(f.initial||0).toLocaleString('ko-KR')+'만원');
+  if(tickers.length) parts.push('포트폴리오 '+tickers.join(' · ')+extra);
+  return parts.join(' · ')||'공유된 시뮬레이션 입력값';
+}
+function clearShareHash(){
+  if(!location.hash.startsWith('#share=')) return;
+  history.replaceState(null,'',location.pathname+location.search);
+}
+function setupSharedSettingsUI(){
+  const params=new URLSearchParams(location.hash.replace(/^#/,''));
+  const raw=params.get('share');
+  if(!raw)return;
+  try{
+    pendingSharedSettings=decodeSharePayload(raw);
+  }catch(e){
+    showShareToast('공유 링크를 읽지 못했습니다: '+e.message,'bad');
+    clearShareHash();
+    return;
+  }
+  const banner=$('#sharedSettingsBanner'),summary=$('#sharedSettingsSummary');
+  if(summary)summary.textContent=sharedSettingsSummary(pendingSharedSettings);
+  if(banner)banner.hidden=false;
+}
+function applyPendingSharedSettings(){
+  if(!pendingSharedSettings)return;
+  if(!applySettings(pendingSharedSettings)){
+    showShareToast('공유 설정을 적용하지 못했습니다.','bad');return;
+  }
+  renderPF();
+  showAllContributionYears=false;
+  renderContributionSchedule();
+  updateModeUI();
+  updateFoldSummaries();
+  updateCashflowHint();
+  scheduleSave();
+  runSimulation();
+  pendingSharedSettings=null;
+  const banner=$('#sharedSettingsBanner');if(banner)banner.hidden=true;
+  clearShareHash();
+  showShareToast('친구의 설정을 적용했습니다.','ok');
+}
+function dismissSharedSettings(){
+  pendingSharedSettings=null;
+  const banner=$('#sharedSettingsBanner');if(banner)banner.hidden=true;
+  clearShareHash();
+  showShareToast('공유 설정을 적용하지 않았습니다.');
+}
+function bindSharing(){
+  $('.share-settings').forEach(btn=>btn.addEventListener('click',shareCurrentSettings));
+  $('#applySharedSettings')?.addEventListener('click',applyPendingSharedSettings);
+  $('#dismissSharedSettings')?.addEventListener('click',dismissSharedSettings);
 }
 function restoreLocal(){
   try{
@@ -529,6 +654,8 @@ async function boot(){
   updateFoldSummaries();
   updateCashflowHint();
   bindAutoSave();
+  bindSharing();
+  setupSharedSettingsUI();
   scheduleSave();
   runSimulation();
 }
