@@ -1,6 +1,6 @@
 #define MyAppName "Dividend FIRE Simulator"
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "0.0.0"
 #endif
 #define MyAppPublisher "Dividend FIRE"
 #define MyAppExeName "DividendFIRE.exe"

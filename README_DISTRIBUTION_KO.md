@@ -1,54 +1,103 @@
-# Dividend FIRE Simulator — Windows 공개 배포판 빌드 프로젝트
+# Dividend FIRE Simulator — 배포 가이드
 
-이 폴더는 기존 실험용 self-extracting EXE와 다릅니다.
+현재 권장 배포판은 **Tauri 기반 Windows Portable v2**와 **Web/PWA**입니다.
 
-## 일반 사용자가 받는 파일
-빌드 후 아래 파일 **하나만 배포**하면 됩니다.
+## 일반 사용자가 쓰는 주소 / 파일
 
-`release\DividendFIRE-Setup-v1.0.0.exe`
+### Web / PWA
 
-설치 사용자는:
+**https://galcampdan.github.io/DividendFIRE/**
+
+휴대폰 브라우저에서 접속한 뒤 **홈 화면에 추가**하면 앱처럼 사용할 수 있습니다.
+
+### Windows
+
+**[최신 Release](https://github.com/galcampdan/DividendFIRE/releases/latest)** 의 Assets에서 아래 형식의 파일을 받습니다.
+
+`DividendFIRE-Tauri-Portable-vX.Y.Z.zip`
+
+사용자는:
+
+- ZIP 압축 해제
+- `DividendFIRE.exe` 실행
 - Python 설치 불필요
-- 관리자 권한 불필요(기본 per-user 설치)
-- 시작 메뉴 등록
-- 선택적으로 바탕화면 바로가기 생성
-- 제거 프로그램 제공
+- 별도 설치 과정 불필요
+- localhost 서버 불필요
+- Windows 10/11의 Microsoft Edge WebView2 사용
 
-## 개발자 PC에서 한 번에 빌드
+## 버전 관리
+
+현재 배포 버전의 기준은 저장소 루트의:
+
+`RELEASE_VERSION`
+
+입니다.
+
+형식은 `vX.Y.Z`입니다. 새 버전을 배포할 때 이 파일의 버전을 올려 main에 반영합니다.
+
+## GitHub Actions 자동 Release
+
+`.github/workflows/build-tauri.yml`은 다음 순서로 동작합니다.
+
+1. 공용 simulation core 테스트
+2. Web 정적 frontend 생성
+3. 모바일 E2E QA
+4. Windows Tauri executable 빌드
+5. 버전이 포함된 Portable ZIP 생성
+6. SHA-256 생성
+7. ClamAV 보안 gate
+8. `RELEASE_VERSION`이 변경된 main push인 경우 GitHub Release 게시
+
+Release에는 다음 파일이 포함됩니다.
+
+- `DividendFIRE-Tauri-Portable-vX.Y.Z.zip`
+- `TAURI_SHA256.txt`
+- `TAURI_SECURITY.txt`
+
+README에는 특정 Release 번호나 해시를 고정하지 않습니다. 검증할 때는 해당 Release에 함께 올라온 파일을 기준으로 합니다.
+
+## 개발자 PC에서 Tauri Portable 빌드
+
 Windows에서:
 
-`BUILD_PUBLIC_INSTALLER.bat`
+```bat
+BUILD_TAURI_PORTABLE.bat
+```
 
-더블클릭.
+이 스크립트는 `RELEASE_VERSION`을 읽고:
 
-빌드 결과:
-`release\DividendFIRE-Setup-v1.0.0.exe`
+- Tauri executable 빌드
+- `release\DividendFIRE-Tauri-Portable-vX.Y.Z.zip` 생성
+- `release\TAURI_SHA256.txt` 생성
 
-## GitHub에서 자동 빌드
-프로젝트를 GitHub 저장소 루트에 올리면 `.github/workflows/build-windows.yml`이 동작합니다.
+까지 수행합니다.
 
-- Actions → Build Windows installer → Run workflow
-- 또는 `v1.0.0` 같은 tag push
-- Windows runner가 PyInstaller + Inno Setup으로 설치파일 생성
-- 태그 빌드는 GitHub Release에도 자동 첨부
+필요 조건:
 
-## 악성코드 오탐을 줄이기 위해 적용한 원칙
-- PyInstaller **ONEDIR** 사용
-- UPX 사용 안 함
-- 코드 난독화/패킹 안 함
-- Base64 payload를 EXE에 숨겨 푸는 커스텀 런처 사용 안 함
-- PowerShell로 앱 payload를 설치하지 않음
-- 다른 Python 프로세스를 검색/강제 종료하지 않음
-- 설치는 표준 Inno Setup 사용
-- 사용자 설정은 `%LOCALAPPDATA%\DividendFIRE\settings.json`만 사용
+- Python
+- Rust / Cargo
+- Tauri CLI
+- Windows WebView2
 
-## 사용자 데이터
-설치 프로그램과 분리되어 저장됩니다.
+일반 사용자는 이 개발 도구들이 필요하지 않습니다.
 
-`%LOCALAPPDATA%\DividendFIRE\settings.json`
+## 코드서명 / SmartScreen
 
-업데이트/재설치 시 설정을 덮어쓰지 않습니다.
+현재 권장 Tauri Portable Release는 Authenticode 코드서명 없이 배포되고 있습니다. 코드서명이 없으면 정상 프로그램이어도 Windows SmartScreen에서 "알 수 없는 게시자" 경고가 표시될 수 있습니다.
 
-## 주의
-코드서명이 없으면 정상 프로그램이어도 SmartScreen 경고가 뜰 수 있습니다.
-공개 배포 전 `CODE_SIGNING.md`를 참고하세요.
+Release는 SHA-256과 ClamAV gate를 함께 제공합니다. 실제 악성코드 탐지가 표시되는 경우 실행하지 않습니다.
+
+향후 코드서명을 적용할 때는 `CODE_SIGNING.md`를 참고합니다.
+
+## Legacy Python / Installer 경로
+
+Python + PyInstaller + Inno Setup 기반 배포 경로는 **legacy / 별도 유지보수용**입니다.
+
+관련 파일:
+
+- `BUILD_PUBLIC_INSTALLER.bat`
+- `.github/workflows/build-windows.yml`
+- `installer/DividendFIRE.iss`
+- `DividendFIRE.spec`
+
+이 경로를 사용할 경우에도 버전은 `RELEASE_VERSION`에서 읽도록 유지합니다.
