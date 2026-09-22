@@ -1,7 +1,7 @@
 {
   "name":"dividend-fire",
   "private":true,
-  "version":"2.0.14",
+  "version":"2.0.15",
   "scripts":{
     "test:core":"node tests/simulation-core.test.js",
     "test:mobile":"node tests/mobile-e2e.mjs"

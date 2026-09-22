@@ -295,9 +295,12 @@ try{
   await legacyPage.goto(baseURL,{waitUntil:'networkidle'});
   await waitDone(legacyPage);
   const legacyUrl=await legacyPage.evaluate(()=>location.origin+location.pathname+'#share='+encodeLegacySharePayload(settingsSnapshot()));
-  await legacyPage.goto(legacyUrl,{waitUntil:'networkidle'});
-  await waitDone(legacyPage);
-  assert.equal(await legacyPage.locator('#sharedSettingsBanner').isVisible(),true,'legacy v1 share links must still open');
+  await legacyPage.close();
+  const legacyReceiver=await legacyContext.newPage();
+  await legacyReceiver.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
+  await legacyReceiver.goto(legacyUrl,{waitUntil:'networkidle'});
+  await waitDone(legacyReceiver);
+  assert.equal(await legacyReceiver.locator('#sharedSettingsBanner').isVisible(),true,'legacy v1 share links must still open');
   await legacyContext.close();
 
   // Built-site smoke test without mocked market.json: validates the actual generated snapshot path.
@@ -346,6 +349,15 @@ try{
   assert.equal(errors.length,0,`WebKit page errors: ${errors.join('; ')}`);
   assert.equal(await page.locator('.mobile-action-bar').isVisible(),true);
   assert.equal(await page.locator('#assetChart svg').count(),1);
+  const webkitShareUrl=await page.evaluate(()=>createShareUrl());
+  assert.match(webkitShareUrl,/#s=v2\./,'WebKit must support compact Deflate share links');
+  assert.ok(webkitShareUrl.length<=220,`WebKit compact share URL too long: ${webkitShareUrl.length} chars`);
+  const webkitReceiver=await context.newPage();
+  await webkitReceiver.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
+  await webkitReceiver.goto(webkitShareUrl,{waitUntil:'networkidle'});
+  await waitDone(webkitReceiver);
+  assert.equal(await webkitReceiver.locator('#sharedSettingsBanner').isVisible(),true,'WebKit must decode compact share links');
+  await webkitReceiver.close();
   await page.locator('#income').fill('321');
   await page.locator('#mobileRun').click();
   await waitDone(page);
