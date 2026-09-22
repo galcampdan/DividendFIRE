@@ -22,6 +22,7 @@ if /i not "%RELEASE_TAG:~0,1%"=="v" (
 )
 
 set "PORTABLE_NAME=DividendFIRE-Tauri-Portable-%RELEASE_TAG%.zip"
+set "TAURI_MODE="
 
 echo ======================================================
 echo   Dividend FIRE - Tauri portable builder
@@ -41,9 +42,16 @@ where cargo >nul 2>nul || (
   exit /b 1
 )
 
-cargo tauri --version >nul 2>nul || (
+where tauri >nul 2>nul && set "TAURI_MODE=standalone"
+if not defined TAURI_MODE (
+  cargo tauri --version >nul 2>nul && set "TAURI_MODE=cargo"
+)
+
+if not defined TAURI_MODE (
   echo [ERROR] Tauri CLI is required.
-  echo Install it, for example: npm install --global @tauri-apps/cli@latest
+  echo Install one of:
+  echo   npm install --global @tauri-apps/cli@latest
+  echo   cargo install tauri-cli
   pause
   exit /b 1
 )
@@ -54,7 +62,11 @@ if errorlevel 1 goto :FAIL
 
 echo [2/4] Building Tauri executable...
 pushd desktop
-cargo tauri build --no-bundle
+if /i "%TAURI_MODE%"=="standalone" (
+  tauri build --no-bundle
+) else (
+  cargo tauri build --no-bundle
+)
 set "ERR=%ERRORLEVEL%"
 popd
 if not "%ERR%"=="0" goto :FAIL
