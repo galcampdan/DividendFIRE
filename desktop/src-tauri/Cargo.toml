@@ -1,6 +1,6 @@
 [package]
 name="dividend-fire"
-version="2.0.9"
+version="2.0.11"
 description="Dividend FIRE Simulator desktop shell"
 authors=["Dividend FIRE contributors"]
 edition="2021"

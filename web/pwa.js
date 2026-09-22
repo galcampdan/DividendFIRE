@@ -7,7 +7,7 @@
       // Download updates quietly. Do not reload the page when a new worker is found.
       // The updated worker takes over naturally after the current app tab/session closes,
       // so the next visit opens the new bundle without a surprise refresh.
-      const reg=await navigator.serviceWorker.register('./service-worker.js?v=20260922-13',{updateViaCache:'none'});
+      const reg=await navigator.serviceWorker.register('./service-worker.js?v=20260922-14',{updateViaCache:'none'});
       await reg.update();
     }catch(err){
       console.warn('PWA service worker registration failed',err);

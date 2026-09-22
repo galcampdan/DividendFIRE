@@ -309,7 +309,7 @@ body{min-width:0}button,input,select,summary,a{touch-action:manipulation}
   .chart-tooltip>.tooltip-cashflow .tooltip-cashflow-breakdown{grid-template-columns:1fr 1fr}
 }
 
-/* v2.0.10: shareable settings links */
+/* v2.0.11: shareable settings links */
 .share-toast{position:fixed;left:50%;top:18px;z-index:100;transform:translateX(-50%);max-width:min(560px,calc(100vw - 28px));padding:10px 14px;border:1px solid #d9dde2;border-radius:12px;background:#fff;box-shadow:0 8px 28px rgba(0,0,0,.13);font-size:12px;font-weight:800;color:#333}
 .share-toast.ok{background:#eef8f1;border-color:#cfe6d5;color:#23673a}.share-toast.bad{background:#fff0f0;border-color:#edcaca;color:#a32222}
 .share-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 14px;padding:13px 14px;border:1px solid #cfd8e6;border-radius:14px;background:#f4f7fb}
