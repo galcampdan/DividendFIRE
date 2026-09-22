@@ -11,7 +11,19 @@ const market={
     VOO:{ticker:'VOO',currency:'USD',price:100,ttm_dps:2,yield:.02,historical_total_return_cagr:.1,history_years:5,default_price_growth:0,default_distribution_growth:0,source:'TEST'}
   }
 };
-const waitDone=page=>page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('완료'));
+const waitDone=async page=>{
+  try{
+    await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('완료'),null,{timeout:10000});
+  }catch(err){
+    const debug=await page.evaluate(()=>({
+      status:document.querySelector('#status')?.textContent||'',
+      proof:document.querySelector('#buildProof')?.textContent||'',
+      href:location.href
+    })).catch(()=>({status:'<page unavailable>',proof:'',href:''}));
+    console.error('waitDone debug:',JSON.stringify(debug));
+    throw err;
+  }
+};
 
 // Update-policy regression guard: PWA updates must never force-refresh an open session.
 const pwaSource=await fs.readFile('web/pwa.js','utf8');
