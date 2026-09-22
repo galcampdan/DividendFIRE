@@ -17,9 +17,9 @@ v2 데스크톱판은 **Tauri + Windows WebView2** 기반이며 Web/PWA와 같�
 
 ## 모바일 / Web PWA
 
-모바일 대응 UI, Web App Manifest, Service Worker가 포함되어 있습니다. GitHub Pages가 활성화되면 휴대폰 브라우저에서 접속한 뒤 **홈 화면에 추가**하여 앱처럼 사용할 수 있습니다.
+모바일 대응 UI, Web App Manifest, Service Worker가 포함되어 있습니다. 휴대폰 브라우저에서 접속한 뒤 **홈 화면에 추가**하여 앱처럼 사용할 수 있습니다.
 
-현재 저장소는 Private 상태이고 GitHub Pages 최초 활성화가 저장소 설정에서 필요하므로, 공개 Web URL은 아직 활성화하지 않았습니다.
+**[🌐 DividendFIRE Web/PWA 실행하기](https://galcampdan.github.io/DividendFIRE/)**
 
 ## 공용 계산 코어
 
