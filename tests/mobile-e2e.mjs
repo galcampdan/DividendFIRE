@@ -40,7 +40,7 @@ try{
     const context=await browser.newContext({viewport:vp,deviceScaleFactor:1,serviceWorkers:'block'});
     const page=await context.newPage();
     const errors=[];
-    page.on('pageerror',e=>errors.push(String(e)));
+    page.on('pageerror',e=>{const msg=String(e);errors.push(msg);console.error('pageerror:',msg);});
     await page.route('**/data/market.json*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(market)}));
     await page.goto(baseURL,{waitUntil:'networkidle'});
     await page.waitForSelector('#resultsPanel');
