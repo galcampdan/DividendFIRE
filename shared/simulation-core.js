@@ -35,6 +35,80 @@ function annualSaleTax(grossSale,foreignAssets,foreignBasis){
   return Math.max(0,realized-2500000)*.22;
 }
 
+// 2026 planning assumptions. Kept separate from the legacy tax path so older
+// simulations keep their prior behavior unless the new UI opts in.
+var HEALTH_INSURANCE_RATE_2026=.0719;
+var LONG_TERM_CARE_RATIO_2026=.1314;
+var FINANCIAL_INCOME_HEALTH_THRESHOLD=10000000;
+var FINANCIAL_INCOME_COMPREHENSIVE_THRESHOLD=20000000;
+
+function highDividendSpecialTax(domestic){
+  domestic=Math.max(0,num(domestic));
+  if(domestic<=0)return 0;
+  var brackets=[[20000000,.14],[300000000,.20],[5000000000,.25],[Infinity,.30]];
+  var national=0,lower=0;
+  for(var i=0;i<brackets.length;i++){
+    var upper=brackets[i][0],rate=brackets[i][1];
+    var chunk=Math.min(domestic,upper)-lower;
+    if(chunk>0)national+=chunk*rate;
+    if(domestic<=upper)break;
+    lower=upper;
+  }
+  return national*1.10;
+}
+function regionalHealthMonthlyFromAssessedIncome(annualAssessedIncome){
+  annualAssessedIncome=Math.max(0,num(annualAssessedIncome));
+  if(annualAssessedIncome<=0)return 0;
+  var monthlyHealth=annualAssessedIncome*HEALTH_INSURANCE_RATE_2026/12;
+  return monthlyHealth*(1+LONG_TERM_CARE_RATIO_2026);
+}
+function regionalHealthMonthlyFromFinancialIncome(annualFinancialIncome){
+  annualFinancialIncome=Math.max(0,num(annualFinancialIncome));
+  if(annualFinancialIncome<=FINANCIAL_INCOME_HEALTH_THRESHOLD)return 0;
+  return regionalHealthMonthlyFromAssessedIncome(annualFinancialIncome);
+}
+function privatePensionWithdrawalRate(age){
+  age=Math.max(0,num(age));
+  return age>=80?.033:(age>=70?.044:.055);
+}
+function cashflowTaxScenarios(opts){
+  opts=opts||{};
+  var foreign=Math.max(0,num(opts.annualForeignDividend));
+  var domestic=Math.max(0,num(opts.annualDomesticDividend));
+  var other=Math.max(0,num(opts.otherAnnualIncome));
+  var gross=foreign+domestic;
+  var age=Math.max(0,num(opts.age,65));
+  var baseHealth=Math.max(0,num(opts.monthlyBaseHealth));
+  var isaAllowance=Math.max(0,num(opts.isaAllowance,2000000));
+
+  function row(key,label,tax,health,note,comprehensiveTriggered){
+    tax=Math.max(0,num(tax)); health=Math.max(0,num(health));
+    var afterTax=Math.max(0,(gross-tax)/12);
+    return {
+      key:key,label:label,grossMonthly:rnd(gross/12),annualTax:rnd(tax),monthlyTax:rnd(tax/12),
+      monthlyIncomeHealth:rnd(health),monthlyBaseHealth:rnd(baseHealth),monthlyTotalHealth:rnd(baseHealth+health),
+      spendableMonthly:rnd(Math.max(0,afterTax-baseHealth-health)),
+      comprehensiveTaxTriggered:!!comprehensiveTriggered,
+      note:note||''
+    };
+  }
+
+  var generalTax=annualDividendTax(foreign,domestic,other);
+  var generalHealth=regionalHealthMonthlyFromFinancialIncome(gross);
+  var highTax=annualDividendTax(foreign,0,other)+highDividendSpecialTax(domestic);
+  var highHealth=regionalHealthMonthlyFromFinancialIncome(gross);
+  var isaTax=Math.max(0,gross-isaAllowance)*.099;
+  var pensionTax=gross*privatePensionWithdrawalRate(age);
+  var pensionHealth=regionalHealthMonthlyFromAssessedIncome(gross*.50);
+
+  return [
+    row('general','일반계좌',generalTax,generalHealth,'실제 포트폴리오 기준 · 금융소득종합과세와 지역가입자 소득분을 간이 반영',gross>FINANCIAL_INCOME_COMPREHENSIVE_THRESHOLD),
+    row('highDividend','국내 고배당 분리과세',highTax,highHealth,domestic>0?'국내 적격 고배당 배당만 특례 적용':'현재 국내 배당이 없어 일반계좌와 실질적으로 동일',foreign>FINANCIAL_INCOME_COMPREHENSIVE_THRESHOLD),
+    row('isa','ISA 가정',isaTax,0,'동일 분배율의 국내상장 대체상품을 ISA에서 보유한다고 가정 · 연간 스냅샷',false),
+    row('pension','연금저축·IRP 가정',pensionTax,pensionHealth,'적격 연금수령 가정 · 연금소득의 건보 소득평가 50% 간이 반영',false)
+  ];
+}
+
 
 function simulate(p,market){
   var years=Math.max(1,Math.min(parseInt(p.years==null?30:p.years,10)||30,60));
@@ -60,6 +134,8 @@ function simulate(p,market){
   var postFireIncome=Math.max(0,num(p.postFireIncome));
   var inflation=clamp(num(p.inflation,2.5)/100,-.02,.15);
   var otherIncome=Math.max(0,num(p.otherAnnualIncome));
+  var autoHealthInsurance=p.autoHealthInsurance===true;
+  var isaAllowance=Math.max(0,num(p.isaAllowance,2000000));
   var reinvest=p.reinvest!==false;
   var stress=clamp(num(p.dividendStress)/100,0,.90);
   var fireMode=String(p.fireMode||'withdrawal').toLowerCase();
@@ -109,14 +185,18 @@ function simulate(p,market){
     var grossDividend=grossForeign+grossDomestic;
     var dividendTax=annualDividendTax(grossForeign*12,grossDomestic*12,otherIncome)/12;
     var netDividend=Math.max(0,grossDividend-dividendTax);
-    var livingCost=(fireExp+health)*Math.pow(1+inflation,year);
-    var postIncome=postFireIncome*Math.pow(1+inflation,year);
+    var autoHealth=autoHealthInsurance?regionalHealthMonthlyFromFinancialIncome(grossDividend*12):0;
+    var inflationFactor=Math.pow(1+inflation,year);
+    var baseLivingCost=(fireExp+health)*inflationFactor;
+    var livingCost=baseLivingCost+autoHealth;
+    var postIncome=postFireIncome*inflationFactor;
     var required=Math.max(0,livingCost-postIncome);
     var totalAssets=securities+cash;
     var grossCapacity=totalAssets*withdrawalRate/12;
     var saleTaxCapacity=annualSaleTax(grossCapacity*12,foreignAssets,foreignBasis)/12;
     return {securities:securities,assets:totalAssets,basis:totalBasis,foreignAssets:foreignAssets,foreignBasis:foreignBasis,
-      grossDividend:grossDividend,netDividend:netDividend,dividendTax:dividendTax,livingCost:livingCost,postFireIncome:postIncome,
+      grossDividend:grossDividend,grossForeignDividend:grossForeign,grossDomesticDividend:grossDomestic,
+      netDividend:netDividend,dividendTax:dividendTax,autoHealthInsurance:autoHealth,baseLivingCost:baseLivingCost,livingCost:livingCost,postFireIncome:postIncome,
       requiredFromPortfolio:required,grossWithdrawalCapacity:grossCapacity,netWithdrawalCapacity:Math.max(0,grossCapacity-saleTaxCapacity),
       withdrawalCapacityTax:saleTaxCapacity};
   }
@@ -156,6 +236,8 @@ function simulate(p,market){
       assets:rnd(st.assets),securities:rnd(st.securities),cash:rnd(cash),contributed:rnd(contributed),monthlyContribution:rnd(applied||0),
       salaryIncome:rnd(salaryIncome),salaryGrowth:salaryGrowth,salaryYear:completedSalaryYears,employmentStartYear:employmentStartYear,employmentActive:employmentActive,fireOtherIncome:rnd(fireOtherIncome),monthlyCashIncome:rnd(monthlyCashIncome),totalCashIn:rnd(totalCashIn),
       grossDividend:rnd(st.grossDividend),netDividend:rnd(st.netDividend),dividendTax:rnd(st.dividendTax),
+      grossForeignDividend:rnd(st.grossForeignDividend),grossDomesticDividend:rnd(st.grossDomesticDividend),
+      autoHealthInsurance:rnd(st.autoHealthInsurance),baseLivingCost:rnd(st.baseLivingCost),
       grossWithdrawal:rnd(st.grossWithdrawalCapacity),netWithdrawal:rnd(st.netWithdrawalCapacity),withdrawalTax:rnd(st.withdrawalCapacityTax),
       livingCost:rnd(st.livingCost),postFireIncome:rnd(st.postFireIncome),requiredFromPortfolio:rnd(st.requiredFromPortfolio),
       shortfall:rnd(shortfall||0),actualSale:rnd(sale||0),actualSaleTax:rnd(saleTax||0)};
@@ -221,6 +303,24 @@ function simulate(p,market){
   var baseMonthlyRemaining=cashflowIncome-cashflowLivingCost-cashflowContribution;
   var cashflowRemaining=cashflowTotalInflow-cashflowLivingCost-cashflowContribution-cashflowDividendReinvest;
   var realFactor=Math.pow(1+inflation,years);
+  var currentBaseHealth=health;
+  var finalBaseHealth=health*realFactor;
+  var currentTaxScenarios=cashflowTaxScenarios({
+    annualForeignDividend:st0.grossForeignDividend*12,
+    annualDomesticDividend:st0.grossDomesticDividend*12,
+    otherAnnualIncome:otherIncome,
+    age:currentAge,
+    monthlyBaseHealth:currentBaseHealth,
+    isaAllowance:isaAllowance
+  });
+  var finalTaxScenarios=cashflowTaxScenarios({
+    annualForeignDividend:final.grossForeignDividend*12,
+    annualDomesticDividend:final.grossDomesticDividend*12,
+    otherAnnualIncome:otherIncome,
+    age:currentAge+years,
+    monthlyBaseHealth:finalBaseHealth,
+    isaAllowance:isaAllowance
+  });
   var sortedSchedule={};
   Object.keys(schedule).sort(function(a,b){return Number(a)-Number(b);}).forEach(function(y){sortedSchedule[y]=rnd(schedule[y]);});
 
@@ -234,18 +334,34 @@ function simulate(p,market){
     cashflowLivingCost:rnd(cashflowLivingCost),cashflowContribution:rnd(cashflowContribution),
     cashflowDividendReinvest:rnd(cashflowDividendReinvest),cashflowRemaining:rnd(cashflowRemaining),
     contributionSchedule:sortedSchedule,currentNetDividend:rnd(st0.netDividend),currentGrossDividend:rnd(st0.grossDividend),
+    currentAutoHealthInsurance:rnd(st0.autoHealthInsurance),currentSpendableDividend:rnd(Math.max(0,st0.netDividend-currentBaseHealth-st0.autoHealthInsurance)),
+    currentTaxScenarios:currentTaxScenarios,
     currentNetWithdrawal:rnd(st0.netWithdrawalCapacity),currentGrossWithdrawal:rnd(st0.grossWithdrawalCapacity),
-    finalNetDividend:rnd(final.netDividend),finalGrossDividend:rnd(final.grossDividend),finalNetWithdrawal:rnd(final.netWithdrawalCapacity),
+    finalNetDividend:rnd(final.netDividend),finalGrossDividend:rnd(final.grossDividend),
+    finalAutoHealthInsurance:rnd(final.autoHealthInsurance),finalSpendableDividend:rnd(Math.max(0,final.netDividend-finalBaseHealth-final.autoHealthInsurance)),
+    finalTaxScenarios:finalTaxScenarios,
+    finalNetWithdrawal:rnd(final.netWithdrawalCapacity),
     finalGrossWithdrawal:rnd(final.grossWithdrawalCapacity),currentNetCashflow:rnd(fireMode==='withdrawal'?st0.netWithdrawalCapacity:st0.netDividend),
     finalNetCashflow:rnd(fireMode==='withdrawal'?final.netWithdrawalCapacity:final.netDividend),finalLivingCost:rnd(final.livingCost),
     finalRequiredFromPortfolio:rnd(final.requiredFromPortfolio),finalRealNetDividend:rnd(realFactor>0?final.netDividend/realFactor:final.netDividend),
     finalRealRequired:rnd(realFactor>0?final.requiredFromPortfolio/realFactor:final.requiredFromPortfolio),
     cumulativeDividendTax:rnd(cumDivTax),cumulativeSaleTax:rnd(cumSaleTax),cumulativeTax:rnd(cumDivTax+cumSaleTax),
+    autoHealthInsurance:autoHealthInsurance,isaAllowance:rnd(isaAllowance),
     usdkrw:usdkrw,fxSource:fxSource,
     notes:['공용 시뮬레이션 코어에서 계산했습니다.','시장 데이터 공급원은 플랫폼 어댑터가 제공합니다.','세금·건보료는 계획용 간이 추정입니다.']
   };
 }
 
 
-return {simulate:simulate,progressiveIncomeTax:progressiveIncomeTax,annualDividendTax:annualDividendTax,annualSaleTax:annualSaleTax};
+return {
+  simulate:simulate,
+  progressiveIncomeTax:progressiveIncomeTax,
+  annualDividendTax:annualDividendTax,
+  annualSaleTax:annualSaleTax,
+  highDividendSpecialTax:highDividendSpecialTax,
+  regionalHealthMonthlyFromFinancialIncome:regionalHealthMonthlyFromFinancialIncome,
+  regionalHealthMonthlyFromAssessedIncome:regionalHealthMonthlyFromAssessedIncome,
+  privatePensionWithdrawalRate:privatePensionWithdrawalRate,
+  cashflowTaxScenarios:cashflowTaxScenarios
+};
 });

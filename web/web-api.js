@@ -1,7 +1,7 @@
 // Dividend FIRE browser/Tauri adapter. Math lives in shared/simulation-core.js.
 (function(){
 'use strict';
-var WEB_VERSION='v2.0.17',WEB_BUILD='2026-09-22-v2.0.17-share-links-1',SETTINGS_KEY='DividendFireMVP.settings.v2';
+var WEB_VERSION='v2.1.0',WEB_BUILD='2026-09-23-v2.1.0-tax-health-1',SETTINGS_KEY='DividendFireMVP.settings.v2';
 var nativeFetch=window.fetch.bind(window),marketPromise=null;
 var DEMO={
 VOO:{ticker:'VOO',currency:'USD',price:600,ttm_dps:7.2,yield:.012,historical_total_return_cagr:.10,history_years:5,default_price_growth:.055,default_distribution_growth:.05,source:'DEMO FALLBACK'},
@@ -32,5 +32,5 @@ async function api(raw,options){
  return null;
 }
 window.fetch=async function(input,options){options=options||{};var raw=typeof input==='string'?input:(input&&input.url)||'';try{var u=new URL(raw,location.href);if(u.pathname.includes('/api/')){var h=await api(raw,options);if(h)return h;}}catch(_){}return nativeFetch(input,options);};
-window.addEventListener('DOMContentLoaded',function(){var n=document.querySelector('.notice p');if(n)n.textContent=(platform()==='tauri'?'Desktop Edition':'Web/PWA Edition')+'은 공용 JavaScript 계산 코어를 사용합니다. 설정은 기기에 저장되고 시장 데이터는 빌드 시 포함된 스냅샷을 사용합니다. 종목별 성장률은 미래 예측이 아니라 사용자가 조정하는 가정이며 세금·건보료는 계획용 간이 추정입니다.';});
+window.addEventListener('DOMContentLoaded',function(){var n=document.querySelector('.notice p');if(n)n.textContent=(platform()==='tauri'?'Desktop Edition':'Web/PWA Edition')+'은 공용 JavaScript 계산 코어를 사용합니다. 설정은 기기에 저장되고 시장 데이터는 빌드 시 포함된 스냅샷을 사용합니다. 종목별 성장률은 미래 예측이 아니라 사용자가 조정하는 가정이며 세금·건보료는 2026년 제도를 바탕으로 한 계획용 간이 추정입니다.';});
 })();
