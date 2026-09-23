@@ -81,14 +81,14 @@ function cashflowTaxScenarios(opts){
   var baseHealth=Math.max(0,num(opts.monthlyBaseHealth));
   var isaAllowance=Math.max(0,num(opts.isaAllowance,2000000));
 
-  function row(key,label,tax,health,note){
+  function row(key,label,tax,health,note,comprehensiveTriggered){
     tax=Math.max(0,num(tax)); health=Math.max(0,num(health));
     var afterTax=Math.max(0,(gross-tax)/12);
     return {
       key:key,label:label,grossMonthly:rnd(gross/12),annualTax:rnd(tax),monthlyTax:rnd(tax/12),
       monthlyIncomeHealth:rnd(health),monthlyBaseHealth:rnd(baseHealth),monthlyTotalHealth:rnd(baseHealth+health),
       spendableMonthly:rnd(Math.max(0,afterTax-baseHealth-health)),
-      comprehensiveTaxTriggered:key==='general'&&gross>FINANCIAL_INCOME_COMPREHENSIVE_THRESHOLD,
+      comprehensiveTaxTriggered:!!comprehensiveTriggered,
       note:note||''
     };
   }
@@ -102,10 +102,10 @@ function cashflowTaxScenarios(opts){
   var pensionHealth=regionalHealthMonthlyFromAssessedIncome(gross*.50);
 
   return [
-    row('general','일반계좌',generalTax,generalHealth,'실제 포트폴리오 기준 · 금융소득종합과세와 지역가입자 소득분을 간이 반영'),
-    row('highDividend','국내 고배당 분리과세',highTax,highHealth,domestic>0?'국내 적격 고배당 배당만 특례 적용':'현재 국내 배당이 없어 일반계좌와 실질적으로 동일'),
-    row('isa','ISA 가정',isaTax,0,'동일 분배율의 국내상장 대체상품을 ISA에서 보유한다고 가정 · 연간 스냅샷'),
-    row('pension','연금저축·IRP 가정',pensionTax,pensionHealth,'적격 연금수령 가정 · 연금소득의 건보 소득평가 50% 간이 반영')
+    row('general','일반계좌',generalTax,generalHealth,'실제 포트폴리오 기준 · 금융소득종합과세와 지역가입자 소득분을 간이 반영',gross>FINANCIAL_INCOME_COMPREHENSIVE_THRESHOLD),
+    row('highDividend','국내 고배당 분리과세',highTax,highHealth,domestic>0?'국내 적격 고배당 배당만 특례 적용':'현재 국내 배당이 없어 일반계좌와 실질적으로 동일',foreign>FINANCIAL_INCOME_COMPREHENSIVE_THRESHOLD),
+    row('isa','ISA 가정',isaTax,0,'동일 분배율의 국내상장 대체상품을 ISA에서 보유한다고 가정 · 연간 스냅샷',false),
+    row('pension','연금저축·IRP 가정',pensionTax,pensionHealth,'적격 연금수령 가정 · 연금소득의 건보 소득평가 50% 간이 반영',false)
   ];
 }
 
