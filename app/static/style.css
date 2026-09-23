@@ -320,3 +320,39 @@ body{min-width:0}button,input,select,summary,a{touch-action:manipulation}
 @media(max-width:700px){.hero .share-button{min-height:42px}.share-banner{margin:0 0 10px;padding:11px}.share-banner-actions button{min-height:44px}.mobile-action-bar{grid-template-columns:1.15fr .7fr .7fr!important}.mobile-action-bar .mobile-share-button{border:1px solid #d9dce0;background:#fff;color:#222}}
 
 /* Shared links are temporary views; friend values never persist over the receiver's saved settings. */
+
+
+/* v2.1.0: 2026 tax + health spendable FIRE cashflow */
+.spendable-cash{background:#f1f7f3;border-color:#d4e6d8}
+.tax-compare-panel{margin-top:14px;border:1px solid var(--border);border-radius:15px;background:#fff;padding:15px}
+.tax-compare-panel .section-head{align-items:flex-start;margin-bottom:10px}
+.tax-compare-panel .section-head h3{margin:0 0 4px}
+.tax-compare-panel .section-head p{margin:0;max-width:56em;color:var(--muted);font-size:11px;line-height:1.45}
+.tax-compare-panel .section-head>span{font-size:10px;color:var(--muted);white-space:nowrap}
+.tax-scenario-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.tax-scenario{border:1px solid #e2e5e8;border-radius:12px;background:var(--soft);padding:11px}
+.tax-scenario[data-scenario="general"]{border-color:#cfd8e6;background:#f4f7fb}
+.tax-scenario header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:9px}
+.tax-scenario header>div{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}
+.tax-scenario header strong{font-size:12px}
+.tax-scenario header>b{font-size:16px;white-space:nowrap}
+.tax-badge{font-style:normal;font-size:8.5px;font-weight:850;color:#8a4a15;background:#fff1df;border:1px solid #f0d4b5;border-radius:999px;padding:2px 5px}
+.tax-scenario-math{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.tax-scenario-math>span{display:flex;flex-direction:column;gap:3px;border-radius:8px;background:#fff;padding:7px}
+.tax-scenario-math small{font-size:8.5px;color:var(--muted)}
+.tax-scenario-math b{font-size:10.5px;white-space:nowrap}
+.tax-scenario p{margin:8px 1px 0;color:var(--muted);font-size:9.5px;line-height:1.4}
+.tax-compare-note{margin:10px 2px 0;color:var(--muted);font-size:10px;line-height:1.5}
+@media(max-width:700px){
+  .tax-compare-panel{padding:11px 9px;border-radius:12px}
+  .tax-compare-panel .section-head{flex-direction:column;gap:3px}
+  .tax-scenario-list{grid-template-columns:1fr}
+  .tax-scenario{padding:10px}
+  .tax-scenario header>b{font-size:15px}
+  .tax-scenario-math{grid-template-columns:repeat(3,1fr)}
+  .tax-scenario-math>span{padding:6px}
+}
+@media(max-width:380px){
+  .tax-scenario-math{grid-template-columns:1fr}
+  .tax-scenario-math>span{flex-direction:row;justify-content:space-between;align-items:center}
+}
