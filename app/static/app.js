@@ -1,6 +1,6 @@
 
-const UI_VERSION='v2.0.17';
-const MODERN_BUILD='2026-09-22-v2.0.17-share-links-1';
+const UI_VERSION='v2.1.0';
+const MODERN_BUILD='2026-09-23-v2.1.0-tax-health-1';
 const LEGACY_APP_VERSION='v8.9.3';
 const LEGACY_BUILD='2026-09-19-v8.9.3-nominal-real-hover-1';
 async function verifyBuild(){
@@ -16,7 +16,7 @@ async function verifyBuild(){
       if(proof){proof.textContent=`⚠ 빌드 불일치: UI ${UI_VERSION} / runtime ${j.version||'?'} ${j.build||''}`;proof.classList.add('bad');}
       throw new Error('앱 파일 버전이 서로 다릅니다. 새로고침하거나 최신 버전을 사용하세요.');
     }
-    if(proof){proof.textContent=modern?'✓ v2.0.17 · SHARED CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
+    if(proof){proof.textContent=modern?'✓ v2.1.0 · 2026 TAX/HEALTH CORE VERIFIED':'✓ LEGACY v8.9.3 VERIFIED';proof.classList.add('ok');}
     return true;
   }catch(e){
     if(proof&&!proof.classList.contains('bad')){proof.textContent='⚠ 실행 환경 확인 실패: '+e.message;proof.classList.add('bad');}
@@ -66,9 +66,9 @@ mobileQuery.addEventListener?.('change',()=>{showAllContributionYears=false;sync
 
 
 function settingsSnapshot(){
-  const ids=['age','initial','income','salaryGrowth','employmentStartYear','contrib','fireexp','health','postFireIncome','otherincome','inflation','years','withdrawalRate','stress'];
+  const ids=['age','initial','income','salaryGrowth','employmentStartYear','contrib','fireexp','health','postFireIncome','otherincome','isaAllowance','inflation','years','withdrawalRate','stress'];
   const fields={}; ids.forEach(id=>{ const el=$('#'+id); if(el) fields[id]=el.value; });
-  return {fields,fireMode:fireMode(),reinvest:$('#reinvest')?.checked!==false,cashflowEnabled:$('#cashflowEnabled')?.checked===true,portfolio:portfolio.map(x=>({...x})),contributionSchedule:{...contributionSchedule}};
+  return {fields,fireMode:fireMode(),reinvest:$('#reinvest')?.checked!==false,cashflowEnabled:$('#cashflowEnabled')?.checked===true,autoHealthInsurance:$('#autoHealthInsurance')?.checked===true,portfolio:portfolio.map(x=>({...x})),contributionSchedule:{...contributionSchedule}};
 }
 function applySettings(v){
   if(!v || typeof v!=='object') return false;
@@ -76,6 +76,7 @@ function applySettings(v){
   if(v.fireMode){const r=document.querySelector(`input[name="fireMode"][value="${v.fireMode}"]`);if(r)r.checked=true;}
   if(typeof v.reinvest==='boolean'&&$('#reinvest')) $('#reinvest').checked=v.reinvest;
   if(typeof v.cashflowEnabled==='boolean'&&$('#cashflowEnabled')) $('#cashflowEnabled').checked=v.cashflowEnabled;
+  if(typeof v.autoHealthInsurance==='boolean'&&$('#autoHealthInsurance')) $('#autoHealthInsurance').checked=v.autoHealthInsurance;
   if(Array.isArray(v.portfolio)&&v.portfolio.length){
     portfolio=v.portfolio.map(x=>({ticker:sanitizeTicker(x.ticker),weight:+x.weight||0,priceGrowth:+x.priceGrowth||0,distributionGrowth:+x.distributionGrowth||0})).filter(x=>x.ticker);
     rebalanceAfterDelete();
@@ -93,7 +94,7 @@ function saveLocal(snapshot){
   try{ localStorage.setItem(SETTINGS_KEY,JSON.stringify(snapshot)); }catch(_){}
 }
 const SHARE_SCHEMA_VERSION = 2;
-const SHARE_FIELD_IDS = ['age','initial','income','salaryGrowth','employmentStartYear','contrib','fireexp','health','postFireIncome','otherincome','inflation','years','withdrawalRate','stress'];
+const SHARE_FIELD_IDS = ['age','initial','income','salaryGrowth','employmentStartYear','contrib','fireexp','health','postFireIncome','otherincome','inflation','years','withdrawalRate','stress','isaAllowance'];
 const PUBLIC_SHARE_URL = 'https://galcampdan.github.io/DividendFIRE/';
 let sharedViewActive = false;
 let shareToastTimer = null;
@@ -132,7 +133,7 @@ function compactShareSettings(settings){
     const n=Number(raw);
     return Number.isFinite(n)?n:String(raw);
   });
-  const flags=(settings?.fireMode==='dividend'?1:0)|(settings?.reinvest!==false?2:0)|(settings?.cashflowEnabled===true?4:0);
+  const flags=(settings?.fireMode==='dividend'?1:0)|(settings?.reinvest!==false?2:0)|(settings?.cashflowEnabled===true?4:0)|(settings?.autoHealthInsurance===true?8:0);
   const pf=(Array.isArray(settings?.portfolio)?settings.portfolio:[]).map(x=>[
     sanitizeTicker(x.ticker),
     Number(x.weight)||0,
@@ -155,6 +156,7 @@ function expandCompactShareSettings(data){
     if(value!==undefined&&value!==null) fields[id]=String(value);
   });
   const flags=Number(data[2])||0;
+  const hasTaxHealthFields=data[1].length>=SHARE_FIELD_IDS.length;
   const portfolio=data[3].map(row=>({
     ticker:sanitizeTicker(row?.[0]),
     weight:Number(row?.[1])||0,
@@ -171,6 +173,7 @@ function expandCompactShareSettings(data){
     fireMode:(flags&1)?'dividend':'withdrawal',
     reinvest:!!(flags&2),
     cashflowEnabled:!!(flags&4),
+    autoHealthInsurance:hasTaxHealthFields?!!(flags&8):true,
     portfolio,
     contributionSchedule
   };
@@ -448,6 +451,7 @@ function payload(){
     currentAge:clamp($('#age').value,0,100),startYear:now.getFullYear(),startMonth:now.getMonth()+1,
     initialCapital:manwonInput($('#initial').value),monthlyIncome:manwonInput($('#income').value),salaryGrowth:+$('#salaryGrowth').value,employmentStartYear:+$('#employmentStartYear').value,fixedExpenses:0,monthlyContribution:manwonInput($('#contrib').value),contributionSchedule:annualContributionPayload(),cashflowEnabled:$('#cashflowEnabled')?.checked===true,
     fireExpenses:manwonInput($('#fireexp').value),healthInsurance:manwonInput($('#health').value),postFireIncome:manwonInput($('#postFireIncome').value),otherAnnualIncome:manwonInput($('#otherincome').value),
+    autoHealthInsurance:$('#autoHealthInsurance')?.checked===true,isaAllowance:manwonInput($('#isaAllowance')?.value||200),
     inflation:+$('#inflation').value,years:+$('#years').value,dividendStress:+$('#stress').value,withdrawalRate:+$('#withdrawalRate').value,fireMode:fireMode(),reinvest:$('#reinvest').checked,
     portfolio:portfolio.map(x=>({ticker:x.ticker,weight:x.weight,priceGrowth:x.priceGrowth,distributionGrowth:x.distributionGrowth}))
   };
@@ -706,6 +710,24 @@ function drawChart(container,rows,series,fireMonth=null,cashMode='withdrawal',sh
   if(mobile)resetMobileReadout();
 }
 
+function renderTaxScenarios(j){
+  const list=$('#taxScenarioList'),rows=Array.isArray(j?.finalTaxScenarios)?j.finalTaxScenarios:[];
+  if(!list)return;
+  if(!rows.length){list.innerHTML='<div class="hint">세금·건보 비교 결과가 없습니다.</div>';return;}
+  list.innerHTML=rows.map(x=>{
+    const badge=x.comprehensiveTaxTriggered?'<em class="tax-badge">금융소득종합과세</em>':'';
+    return `<article class="tax-scenario" data-scenario="${x.key}">
+      <header><div><strong>${x.label}</strong>${badge}</div><b>${manwon(x.spendableMonthly)}/월</b></header>
+      <div class="tax-scenario-math">
+        <span><small>세전 배당</small><b>${manwon(x.grossMonthly)}</b></span>
+        <span><small>월 환산 세금</small><b>− ${manwon(x.monthlyTax)}</b></span>
+        <span><small>월 건보·장기요양</small><b>− ${manwon(x.monthlyTotalHealth)}</b></span>
+      </div>
+      <p>${x.note||''}</p>
+    </article>`;
+  }).join('');
+}
+
 async function runSimulation(){
   if(!portfolio.length)return;const btn=$('#run'),status=$('#status');btn.disabled=true;status.className='status';status.textContent='LIVE 데이터 다운로드 및 2단계 FIRE 계산 중...';
   try{const r=await fetch('/api/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});const j=await r.json();if(!r.ok||j.error)throw new Error(j.error||'시뮬레이션 실패');const withdrawal=j.fireMode==='withdrawal';
@@ -724,9 +746,13 @@ async function runSimulation(){
     }
     $('#finalDivCard').textContent=manwon(j.finalNetCashflow)+'/월';
     $('#finalLivingSub').textContent=withdrawal?`최종 포트폴리오 필요액 ${manwon(j.finalRequiredFromPortfolio)}/월`:`실질 월배당 ${manwon(j.finalRealNetDividend)} · 현재가치 필요액 ${manwon(j.finalRealRequired)}`;
+    const generalTaxScenario=(j.finalTaxScenarios||[]).find(x=>x.key==='general');
+    $('#spendableCard').textContent=manwon(generalTaxScenario?.spendableMonthly??j.finalSpendableDividend)+'/월';
+    $('#spendableSub').textContent=generalTaxScenario?`세전 ${manwon(generalTaxScenario.grossMonthly)} − 세금 ${manwon(generalTaxScenario.monthlyTax)} − 건보 ${manwon(generalTaxScenario.monthlyTotalHealth)}`:'일반계좌 · 지역가입자 기준';
     const remaining=cashflowEnabled()?j.cashflowRemaining:j.baseMonthlyRemaining;
     $('#surplusCard').textContent=manwon(remaining);$('#surplusCard').closest('.metric').classList.toggle('negative',remaining<0);
     renderCashflow(j);
+    renderTaxScenarios(j);
     $('#taxCard').textContent=manwon(j.cumulativeTax);$('#taxSub').textContent=`배당세 ${manwon(j.cumulativeDividendTax)} · 매도세 ${manwon(j.cumulativeSaleTax)}`;
     $('#fxBadge').textContent=`USD/KRW ${Math.round(j.usdkrw).toLocaleString('ko-KR')} · ${j.fxSource.includes('DEMO')?'DEMO':'LIVE'}`;
     drawChart($('#assetChart'),j.rows,[{key:'assets',label:'총자산'},{key:'contributed',label:'누적 납입'}],j.fireMonth,j.fireMode,j.cashflowEnabled);
