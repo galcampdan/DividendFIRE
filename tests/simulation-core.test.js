@@ -93,6 +93,8 @@ assert.strictEqual(core.highDividendSpecialTax(30000000),5280000,'2026 qualified
 assert.strictEqual(core.regionalHealthMonthlyFromFinancialIncome(9000000),0,'financial income at/below 10m should not add regional financial-income premium in this planning model');
 assert.strictEqual(health36,244043);
 assert.strictEqual(core.privatePensionWithdrawalRate(65),0.055);
+assert.strictEqual(core.privatePensionCashflowTax(12000000,65),660000,'under 15m uses age-based pension withholding incl. local tax');
+assert.strictEqual(core.privatePensionCashflowTax(36000000,65),5940000,'over 15m uses 15% separate-tax option incl. local tax in planning snapshot');
 
 const taxRows=core.cashflowTaxScenarios({
   annualForeignDividend:36000000,
