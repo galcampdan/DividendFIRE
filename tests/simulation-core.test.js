@@ -86,3 +86,33 @@ assert.strictEqual(delayedJob.rows.find(r=>r.month===60).salaryIncome,3300000,'s
 assert.strictEqual(delayedJob.rows.find(r=>r.month===72).salaryIncome,3630000,'salary growth compounds from employment year, not simulation start');
 assert.strictEqual(delayedJob.employmentStartYear,2030);
 console.log('delayed employment start test: PASS');
+
+
+const health36=Math.round(core.regionalHealthMonthlyFromFinancialIncome(36000000));
+assert.strictEqual(core.highDividendSpecialTax(30000000),5280000,'2026 qualified high-dividend special tax incl. local tax');
+assert.strictEqual(core.regionalHealthMonthlyFromFinancialIncome(9000000),0,'financial income at/below 10m should not add regional financial-income premium in this planning model');
+assert.strictEqual(health36,244043);
+assert.strictEqual(core.privatePensionWithdrawalRate(65),0.055);
+
+const taxRows=core.cashflowTaxScenarios({
+  annualForeignDividend:36000000,
+  annualDomesticDividend:0,
+  otherAnnualIncome:0,
+  age:65,
+  monthlyBaseHealth:150000,
+  isaAllowance:2000000
+});
+const generalRow=taxRows.find(x=>x.key==='general');
+const isaRow=taxRows.find(x=>x.key==='isa');
+assert.strictEqual(generalRow.monthlyTax,450000);
+assert.strictEqual(generalRow.monthlyIncomeHealth,244043);
+assert.strictEqual(generalRow.spendableMonthly,2155957);
+assert.strictEqual(isaRow.monthlyTax,280500);
+assert.strictEqual(isaRow.spendableMonthly,2569500);
+
+const autoHealth=core.simulate({...base,autoHealthInsurance:true,isaAllowance:2000000},market);
+assert.strictEqual(autoHealth.currentNetDividend,2550000,'tax treatment remains backward-compatible');
+assert.strictEqual(autoHealth.currentAutoHealthInsurance,244043);
+assert.strictEqual(autoHealth.currentSpendableDividend,2305957);
+assert.ok(Array.isArray(autoHealth.finalTaxScenarios)&&autoHealth.finalTaxScenarios.length===4);
+console.log('2026 tax/health scenario tests: PASS');
